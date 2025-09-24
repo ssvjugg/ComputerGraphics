@@ -72,7 +72,7 @@ public class GreyShades {
     }
 
     ///Метод для преобразования массива int в массив double
-    private static double[] toDoubleArray(int[] data) {
+    public static double[] toDoubleArray(int[] data) {
         double[] doubleData = new double[data.length];
         for (int i = 0; i < data.length; i++) {
             doubleData[i] = data[i];
@@ -81,8 +81,8 @@ public class GreyShades {
     }
 
     ///Метод для отображения гистограммы
-    public static void displayChart(String title, int[] histogramData, int overallMaxCount) {
-        XYChart chart = new XYChartBuilder().width(800).height(600).title(title).xAxisTitle("Уровень серого").yAxisTitle("Количество пикселей").build();
+    public static void displayChart(String title, int[] histogramData, int overallMaxCount, String xAxisTitle, String yAxisTitle) {
+        XYChart chart = new XYChartBuilder().width(800).height(600).title(title).xAxisTitle(xAxisTitle).yAxisTitle(yAxisTitle).build();
         chart.getStyler().setYAxisMin(0.0);
         chart.getStyler().setYAxisMax((double) overallMaxCount * 1.1);
         chart.addSeries("Интенсивность", null, toDoubleArray(histogramData));
@@ -145,8 +145,8 @@ public class GreyShades {
 
             int overallMaxCount = Math.max(maxCount1, maxCount2);
 
-            displayChart("Гистограмма 1", histogram1, overallMaxCount);
-            displayChart("Гистограмма 2", histogram2, overallMaxCount);
+            displayChart("Гистограмма 1", histogram1, overallMaxCount, "Интенсивность", "Кол-во пикселей");
+            displayChart("Гистограмма 2", histogram2, overallMaxCount, "Интенсивность", "Кол-во пикселей");
 
         } catch (Exception e) {
             System.err.println("Ошибка: " + e.getMessage());
