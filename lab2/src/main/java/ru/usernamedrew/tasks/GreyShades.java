@@ -5,6 +5,7 @@ import java.awt.image.BufferedImage;
 import java.awt.image.WritableRaster;
 import java.io.File;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import javax.imageio.ImageIO;
 
@@ -62,22 +63,12 @@ public class GreyShades {
 
     ///Метод для поиска максимального значения в гистограмме
     public static int findMaxCount(int[] histogram) {
-        int maxCount = 0;
-        for (int count : histogram) {
-            if (count > maxCount) {
-                maxCount = count;
-            }
-        }
-        return maxCount;
+        return Arrays.stream(histogram).max().getAsInt();
     }
 
     ///Метод для преобразования массива int в массив double
     public static double[] toDoubleArray(int[] data) {
-        double[] doubleData = new double[data.length];
-        for (int i = 0; i < data.length; i++) {
-            doubleData[i] = data[i];
-        }
-        return doubleData;
+        return Arrays.stream(data).mapToDouble(i -> (double) i).toArray();
     }
 
     ///Метод для отображения гистограммы
@@ -154,6 +145,6 @@ public class GreyShades {
     }
 
     public static void main(String[] args) {
-        convertImageToGreyscale("src/main/resources/images/dab.png");
+        convertImageToGreyscale("src/main/resources/images/mona.jpg");
     }
 }
