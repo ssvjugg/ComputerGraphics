@@ -4,7 +4,6 @@ import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.IOException;
-import java.util.Arrays;
 
 // запустить:
 //cd lab2
@@ -65,24 +64,11 @@ public class Histogram {
         ImageIO.write(blueImg, "png", blueFile);
 
         // вывод гистограмм
-        System.out.println("Красный канал:");
-        printHist(red);
+        GreyShades.displayChart("Красный", red, GreyShades.findMaxCount(red), "Канал красного цвета", "Частота");
 
-        System.out.println("\nЗеленый канал:");
-        printHist(green);
+        GreyShades.displayChart("Зеленый", red, GreyShades.findMaxCount(green), "Канал зеленого цвета", "Частота");
 
-        System.out.println("\nСиний канал:");
-        printHist(blue);
+        GreyShades.displayChart("Синий", red, GreyShades.findMaxCount(blue), "Канал синего цвета", "Частота");
     }
 
-    private static void printHist(int[] hist) {
-        int max = Arrays.stream(hist).max().orElse(1);
-
-        for (int i = 0; i < hist.length; i++) {
-            if (hist[i] > 0) {
-                int stars = hist[i] * 50 / max;
-                System.out.printf("%3d: %s%n", i, "*".repeat(stars));
-            }
-        }
-    }
 }
