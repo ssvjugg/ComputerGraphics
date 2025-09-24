@@ -81,6 +81,7 @@ public class RGBtoHSV {
                 fileChooser = new JFileChooser();
                 fileChooser.setFileFilter(new FileNameExtensionFilter(
                         "Изображения", "jpg", "jpeg", "png", "bmp", "gif"));
+                fileChooser.setCurrentDirectory(new File("./src/main/resources/images"));
             }
 
             if (fileChooser.showOpenDialog(this) == JFileChooser.APPROVE_OPTION) {
@@ -144,11 +145,12 @@ public class RGBtoHSV {
             for (int y = 0; y < height; y++) {
                 for (int x = 0; x < width; x++) {
                     int rgb = original.getRGB(x, y);
+                    Color c = new Color(rgb);
 
                     // Извлекаем RGB компоненты
-                    int r = (rgb >> 16) & 0xFF;
-                    int g = (rgb >> 8) & 0xFF;
-                    int b = rgb & 0xFF;
+                    int r = c.getRed();
+                    int g = c.getGreen();
+                    int b = c.getBlue();
 
                     // Конвертируем RGB в HSV
                     float[] hsv = rgbToHsv(r, g, b);
@@ -217,7 +219,7 @@ public class RGBtoHSV {
                 r = g = b = (int) (v * 255);
             } else {
                 h /= 60;
-                int i = (int) Math.floor(h);
+                int i = (int) Math.floor(h) % 6;
                 float f = h - i;
                 float p = v * (1 - s);
                 float q = v * (1 - s * f);
