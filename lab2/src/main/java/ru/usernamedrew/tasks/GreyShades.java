@@ -12,20 +12,20 @@ import org.knowm.xchart.SwingWrapper;
 import org.knowm.xchart.XYChart;
 import org.knowm.xchart.XYChartBuilder;
 
-///Класс для хранения RGB
-class RGB {
-    public final int r;
-    public final int g;
-    public final int b;
-
-    RGB(int r, int g, int b) {
-        this.r = r;
-        this.g = g;
-        this.b = b;
-    }
-}
-
 public class GreyShades {
+    ///Класс для хранения RGB
+    static class RGB {
+        public final int r;
+        public final int g;
+        public final int b;
+
+        RGB(int r, int g, int b) {
+            this.r = r;
+            this.g = g;
+            this.b = b;
+        }
+    }
+
     ///Метод для получения RGB из пикселя
     static RGB getRGBFromPixel(int pixel) {
         Color color = new Color(pixel);
@@ -154,6 +154,6 @@ public class GreyShades {
     }
 
     public static void main(String[] args) {
-        convertImageToGreyscale("E:/comp_graphics/lab2/lab2/src/main/resources/images/mona.jpg");
+        convertImageToGreyscale("src/main/resources/images/dab.png");
     }
 }
