@@ -1,3 +1,5 @@
+package ru.usernamedrew;
+
 import java.awt.*;
 import java.awt.image.BufferedImage;
 import javax.swing.*;
@@ -6,17 +8,17 @@ import javax.swing.*;
 // 2. запустить файл (java GradientTriangle)
 
 public class GradientTriangle extends JPanel {
-    private BufferedImage image;
-    private int width = 600;
-    private int height = 600;
+    private final BufferedImage image;
+    private final int width = 600;
+    private final int height = 600;
 
-    private Point p1 = new Point(300, 100);
-    private Point p2 = new Point(100, 500);
-    private Point p3 = new Point(500, 500);
+    private final Point p1 = new Point(300, 100);
+    private final Point p2 = new Point(100, 500);
+    private final Point p3 = new Point(500, 500);
 
-    private Color color1 = Color.RED;
-    private Color color2 = Color.GREEN;
-    private Color color3 = Color.BLUE;
+    private final Color color1 = Color.RED;
+    private final Color color2 = Color.GREEN;
+    private final Color color3 = Color.BLUE;
 
     // cоздает изображение 600x600 пикселей и запускает рисование треугольника
     public GradientTriangle() {
