@@ -18,38 +18,132 @@ public class DrawingLine {
         }
     }
 
-    public static ArrayList<Point> BresenhamLineAlgorithm(int x0, int x1, int y0, int y1) {
+    public static int[] swap(int a, int b) {
+        int temp = a;
+        a = b;
+        b = temp;
+        return new int[]{a, b};
+    }
+
+    public static ArrayList<Point> plotLineLow(int x0, int x1, int y0, int y1) {
         ArrayList<Point> linePoints = new ArrayList<>();
-
-        int dx = Math.abs(x1 - x0);
-        int dy = Math.abs(y1 - y0);
-        int error = 0;
-        int deltaError = dy + 1;
+        int dx = x1 - x0;
+        int dy = y1 - y0;
+        int yi = 1;
+        if (dy < 0) {
+            yi = -1;
+            dy = -dy;
+        }
+        int D = 2 * dy - dx;
         int y = y0;
-        int diry = (y1 > y0) ? 1 : -1;
-
         for (int x = x0; x <= x1; x++) {
             linePoints.add(new Point(x, y));
-            error += deltaError;
-            if (error >= dx + 1) {
-                y += diry;
-                error -= dx + 1;
+            if (D > 0) {
+                y += yi;
+                D += 2 * (dy - dx);
+            } else {
+                D += 2 * dy;
             }
         }
         return linePoints;
     }
 
+    public static ArrayList<Point> plotLineHigh(int x0, int x1, int y0, int y1) {
+        ArrayList<Point> linePoints = new ArrayList<>();
+        int dx = x1 - x0;
+        int dy = y1 - y0;
+        int xi = 1;
+        if (dx < 0) {
+            xi = -1;
+            dx = -dx;
+        }
+        int D = 2 * dx - dy;
+        int x = x0;
+        for (int y = y0; y <= y1; y++) {
+            linePoints.add(new Point(x, y));
+            if (D > 0) {
+                x += xi;
+                D += 2 * (dx - dy);
+            } else {
+                D += 2 * dx;
+            }
+        }
+        return linePoints;
+    }
+
+    public static ArrayList<Point> BresenhamLineAlgorithm(int x0, int x1, int y0, int y1) {
+//        ArrayList<Point> linePoints = new ArrayList<>();
+//
+//        int dx = Math.abs(x1 - x0);
+//        int dy = Math.abs(y1 - y0);
+//        int error = 0;
+//        int deltaError = dy + 1;
+//        int y = y0;
+//        int diry = (y1 > y0) ? 1 : -1;
+//
+//        for (int x = x0; x <= x1; x++) {
+//            linePoints.add(new Point(x, y));
+//            error += deltaError;
+//            if (error >= dx + 1) {
+//                y += diry;
+//                error -= dx + 1;
+//            }
+//        }
+//        return linePoints;
+        if (Math.abs(y1 - y0) < Math.abs(x1 - x0)) {
+            if (x0 > x1) {
+                return plotLineLow(x1, x0, y1, y0);
+            } else {
+                return plotLineLow(x0, x1, y0, y1);
+            }
+        } else {
+            if (y0 > y1) {
+                return plotLineHigh(x1, x0, y1, y0);
+            } else {
+                return plotLineHigh(x0, x1, y0, y1);
+            }
+        }
+    }
+
 
     public static ArrayList<PointWithIntensity> WuLineAlgorithm(int x0, int x1, int y0, int y1) {
         ArrayList<PointWithIntensity> linePoints = new ArrayList<>();
+
+        boolean steep = Math.abs(y1 - y0) > Math.abs(x1 - x0);
+
+        if (steep) {
+            int[] temp = swap(x0, y0);
+            x0 = temp[0];
+            y0 = temp[1];
+
+            int[] temp1 = swap(x1, y1);
+            x1 = temp1[0];
+            y1 = temp1[1];
+        }
+
+        if (x0 > x1) {
+            int[] temp = swap(x0, x1);
+            x0 = temp[0];
+            x1 = temp[1];
+
+            int[] temp1 = swap(y0, y1);
+            y0 = temp1[0];
+            y1 = temp1[1];
+        }
+
         linePoints.add(new PointWithIntensity(x1, y1, 1));
         float dx = x1 - x0;
         float dy = y1 - y0;
-        float gradient = dy / dx;
+        float gradient = dx == 0 ? 1.0f : dy / dx;
         float y = y0 + gradient;
         for (int x = x0 + 1; x <= x1 - 1; x++) {
-            linePoints.add(new PointWithIntensity(x, (int) y, 1 - (y - (int) y)));
-            linePoints.add(new PointWithIntensity(x, (int) y + 1, y - (int) y));
+            if (steep) {
+                linePoints.add(new PointWithIntensity((int) y, x, 1 - (y - (int) y)));
+                linePoints.add(new PointWithIntensity((int) y + 1, x, y - (int) y));
+            } else {
+                linePoints.add(new PointWithIntensity(x, (int) y, 1 - (y - (int) y)));
+                linePoints.add(new PointWithIntensity(x, (int) y + 1, y - (int) y));
+            }
             y += gradient;
         }
         return linePoints;
@@ -106,7 +200,7 @@ public class DrawingLine {
     public static void main(String[] args) {
         SwingUtilities.invokeLater(() -> {
             JFrame frame = new JFrame("Drawing Line");
-            LineDrawerPanel panel = new LineDrawerPanel(10, 50, 10, 40);
+            LineDrawerPanel panel = new LineDrawerPanel(50, 20, 25, 10);
             panel.setPreferredSize(new Dimension(400, 300));
 
             frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
@@ -115,8 +209,7 @@ public class DrawingLine {
             frame.setLocationRelativeTo(null);
             frame.setVisible(true);
 
-            panel.setAlgo(false);
+            panel.setAlgo(true);
         });
     }
 }
-
