@@ -163,13 +163,4 @@ public class BoundaryTracer extends JPanel {
         g.setColor(Color.BLACK);
         g.drawString("Точек границы: " + points.size(), 10, 20);
     }
-
-    public static void main(String[] args) {
-        JFrame frame = new JFrame("Boundary Tracer");
-        frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
-        frame.add(new BoundaryTracer());
-        frame.pack();
-        frame.setLocationRelativeTo(null);
-        frame.setVisible(true);
-    }
 }

@@ -90,15 +90,4 @@ public class BarycentricTriangle extends JPanel {
 
         g.drawImage(image, 0, 0, this);
     }
-
-    public static void main(String[] args) {
-        SwingUtilities.invokeLater(() -> {
-            JFrame frame = new JFrame("Barycentric Triangle Rasterization");
-            frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
-            frame.add(new BarycentricTriangle());
-            frame.pack();
-            frame.setLocationRelativeTo(null);
-            frame.setVisible(true);
-        });
-    }
 }

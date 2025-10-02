@@ -196,20 +196,4 @@ public class DrawingLine {
             }
         }
     }
-
-    public static void main(String[] args) {
-        SwingUtilities.invokeLater(() -> {
-            JFrame frame = new JFrame("Drawing Line");
-            LineDrawerPanel panel = new LineDrawerPanel(50, 20, 25, 10);
-            panel.setPreferredSize(new Dimension(400, 300));
-
-            frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
-            frame.add(panel);
-            frame.pack();
-            frame.setLocationRelativeTo(null);
-            frame.setVisible(true);
-
-            panel.setAlgo(true);
-        });
-    }
 }
