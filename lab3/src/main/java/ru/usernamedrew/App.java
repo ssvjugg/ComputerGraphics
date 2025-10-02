@@ -7,9 +7,7 @@ import java.awt.event.ActionListener;
 
 public class App {
     public static void main( String[] args ) {
-        SwingUtilities.invokeLater(() -> {
-            createAndShowGUI();
-        });
+        SwingUtilities.invokeLater(App::createAndShowGUI);
     }
 
     private static void createAndShowGUI() {
@@ -35,33 +33,13 @@ public class App {
         titleLabel.setFont(new Font("Arial", Font.BOLD, 18));
         titleLabel.setBorder(BorderFactory.createEmptyBorder(20, 0, 20, 0));
 
-        lineDrawingBtn.addActionListener(new ActionListener() {
-            @Override
-            public void actionPerformed(ActionEvent e) {
-                openLineDrawing();
-            }
-        });
+        lineDrawingBtn.addActionListener(e -> openLineDrawing());
 
-        triangleBtn.addActionListener(new ActionListener() {
-            @Override
-            public void actionPerformed(ActionEvent e) {
-                openBarycentricTriangle();
-            }
-        });
+        triangleBtn.addActionListener(e -> openBarycentricTriangle());
 
-        boundaryTracerBtn.addActionListener(new ActionListener() {
-            @Override
-            public void actionPerformed(ActionEvent e) {
-                openBoundaryTracer();
-            }
-        });
+        boundaryTracerBtn.addActionListener(e -> openBoundaryTracer());
 
-        floodFillBtn.addActionListener(new ActionListener() {
-            @Override
-            public void actionPerformed(ActionEvent e) {
-                openFloodFill();
-            }
-        });
+        floodFillBtn.addActionListener(e -> openFloodFill());
 
         mainFrame.add(buttonPanel, BorderLayout.CENTER);
         mainFrame.add(titleLabel, BorderLayout.NORTH);

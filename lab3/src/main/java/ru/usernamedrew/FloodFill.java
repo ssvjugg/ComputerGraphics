@@ -30,7 +30,6 @@ public class FloodFill extends JFrame {
         setLocationRelativeTo(null);
 
         initializeCanvas();
-        //loadDefaultPattern();
         setupUI();
     }
 
@@ -40,23 +39,6 @@ public class FloodFill extends JFrame {
         g2d.setColor(Color.WHITE);
         g2d.fillRect(0, 0, 1000, 800);
         g2d.dispose();
-    }
-
-    private void loadDefaultPattern() {
-        try {
-            // Попробуем загрузить текстуру по умолчанию
-            File file = new File("./src/main/resources/screen-7.jpg");
-            if (file.exists()) {
-                loadedImg = ImageIO.read(file);
-                updateStatus("Текстура загружена: " + loadedImg.getWidth() + "x" + loadedImg.getHeight());
-            } else {
-                createDefaultPattern();
-                updateStatus("Создана текстурa по умолчанию");
-            }
-        } catch (IOException e) {
-            createDefaultPattern();
-            updateStatus("Ошибка загрузки: " + e.getMessage());
-        }
     }
 
     private void loadCustomPattern() {
@@ -75,31 +57,6 @@ public class FloodFill extends JFrame {
                 JOptionPane.showMessageDialog(this, "Ошибка загрузки: " + e.getMessage());
             }
         }
-    }
-
-    private void createDefaultPattern() {
-        // Создаем текстуру 64x64
-        loadedImg = new BufferedImage(64, 64, BufferedImage.TYPE_INT_RGB);
-        Graphics2D g = loadedImg.createGraphics();
-
-        // Градиентная текстура
-        for (int y = 0; y < 64; y++) {
-            for (int x = 0; x < 64; x++) {
-                int r = (x * 255 / 64) & 0xFF;
-                int gColor = (y * 255 / 64) & 0xFF;
-                int b = ((x + y) * 255 / 128) & 0xFF;
-                loadedImg.setRGB(x, y, new Color(r, gColor, b).getRGB());
-            }
-        }
-
-        // Добавляем некоторые детали
-        g.setColor(Color.BLACK);
-        for (int i = 0; i < 64; i += 16) {
-            g.drawLine(i, 0, i, 63);
-            g.drawLine(0, i, 63, i);
-        }
-
-        g.dispose();
     }
 
     private void setupUI() {
