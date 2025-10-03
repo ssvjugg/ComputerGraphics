@@ -2,10 +2,25 @@ package ru.usernamedrew;
 
 import javax.swing.*;
 import java.awt.*;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
 import java.util.ArrayList;
 
 
 public class DrawingLine {
+
+    static class Line {
+        int x1, y1, x2, y2;
+        boolean isBresenham;
+
+        public Line(int x1, int y1, int x2, int y2, boolean isBresenham) {
+            this.x1 = x1;
+            this.y1 = y1;
+            this.x2 = x2;
+            this.y2 = y2;
+            this.isBresenham = isBresenham;
+        }
+    }
 
     static class PointWithIntensity {
         int x, y;
@@ -150,42 +165,79 @@ public class DrawingLine {
     }
 
     public static class LineDrawerPanel extends JPanel {
-        private ArrayList<Point> bresenhamLinePoints = new ArrayList<>();
-        private ArrayList<PointWithIntensity> wuLinePoints = new ArrayList<>();
+        private ArrayList<Line> lines = new ArrayList<>();
 
-        private boolean drawBresenhamLine = false;
+        private boolean drawBresenhamLine = true;
+        private Point startPoint = null;
+        private Point currentEndPoint = null;
+        private boolean drawing = false;
+
         private static final int SCALE = 5;
 
-        public LineDrawerPanel(int x0, int x1, int y0, int y1) {
-            bresenhamLinePoints = DrawingLine.BresenhamLineAlgorithm(x0, x1, y0, y1);
-            wuLinePoints = DrawingLine.WuLineAlgorithm(x0, x1, y0, y1);
+        public LineDrawerPanel() {
+            addMouseListener(new MouseAdapter() {
+                @Override
+                public void mousePressed(MouseEvent e) {
+                    if (!drawing) {
+                        startPoint = new Point(e.getX() / SCALE, e.getY() / SCALE);
+                        drawing = true;
+                    } else {
+                        Point endPoint = new Point(e.getX() / SCALE, e.getY() / SCALE);
+                        lines.add(new Line(startPoint.x, startPoint.y, endPoint.x, endPoint.y, drawBresenhamLine));
+                        drawing = false;
+                        startPoint = null;
+                        currentEndPoint = null;
+                        repaint();
+                    }
+                }
+            });
+
+            addMouseMotionListener(new MouseAdapter() {
+                @Override
+                public void mouseDragged(MouseEvent e) {
+                    if (drawing) {
+                        currentEndPoint = new Point(e.getX() / SCALE, e.getY() / SCALE);
+                        repaint();
+                    }
+                }
+            });
         }
 
         public void setAlgo(boolean drawBresenhamLine) {
             this.drawBresenhamLine = drawBresenhamLine;
+        }
+
+        public void clearLines(){
+            lines.clear();
+            drawing = false;
+            startPoint = null;
+            currentEndPoint = null;
             repaint();
         }
 
         @Override
         protected void paintComponent(Graphics g) {
             super.paintComponent(g);
-            if (drawBresenhamLine) {
-                drawBresenhamLine(g);
-            } else {
-                drawWuLine(g);
+            for (Line line : lines) {
+                if (line.isBresenham) {
+                    drawBresenhamLine(g, line.x1, line.y1, line.x2, line.y2);
+                } else {
+                    drawWuLine(g, line.x1, line.y1, line.x2, line.y2);
+                }
             }
-
         }
 
-        private void drawBresenhamLine(Graphics g) {
+        private void drawBresenhamLine(Graphics g, int x0, int y0, int x1, int y1) {
             g.setColor(Color.BLACK);
-            for (Point point : bresenhamLinePoints) {
+            ArrayList<Point> points = BresenhamLineAlgorithm(x0, x1, y0, y1);
+            for (Point point : points) {
                 g.fillRect(point.x * SCALE, point.y * SCALE, SCALE, SCALE);
             }
         }
 
-        private void drawWuLine(Graphics g) {
-            for (PointWithIntensity wp : wuLinePoints) {
+        private void drawWuLine(Graphics g, int x0, int y0, int x1, int y1) {
+            ArrayList<PointWithIntensity> points = WuLineAlgorithm(x0, x1, y0, y1);
+            for (PointWithIntensity wp : points) {
                 int alpha = (int) (wp.intensity * 255);
                 alpha = Math.max(0, Math.min(255, alpha));
 

@@ -50,19 +50,22 @@ public class App {
     private static void openLineDrawing() {
         SwingUtilities.invokeLater(() -> {
             JFrame frame = new JFrame("Алгоритмы рисования линий");
-            DrawingLine.LineDrawerPanel panel = new DrawingLine.LineDrawerPanel(50, 20, 25, 10);
+            DrawingLine.LineDrawerPanel panel = new DrawingLine.LineDrawerPanel();
             panel.setPreferredSize(new Dimension(400, 300));
 
             // Панель для переключения алгоритмов
             JPanel controlPanel = new JPanel();
             JButton bresenhamBtn = new JButton("Алгоритм Брезенхема");
             JButton wuBtn = new JButton("Алгоритм Ву");
+            JButton clearBtn = new JButton("Очистить");
 
-            bresenhamBtn.addActionListener(e -> panel.setAlgo(true));
-            wuBtn.addActionListener(e -> panel.setAlgo(false));
+            bresenhamBtn.addActionListener(e -> {panel.setAlgo(true); panel.repaint();});
+            wuBtn.addActionListener(e -> {panel.setAlgo(false); panel.repaint();});
+            clearBtn.addActionListener(e -> panel.clearLines());
 
             controlPanel.add(bresenhamBtn);
             controlPanel.add(wuBtn);
+            controlPanel.add(clearBtn);
 
             frame.setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
             frame.setLayout(new BorderLayout());
