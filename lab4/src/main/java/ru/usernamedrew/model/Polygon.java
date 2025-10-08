@@ -12,9 +12,9 @@ public class Polygon {
     public Polygon() {
         this.vertices = new ArrayList<>();
         this.color = new Color(
-                (int)(Math.random() * 255),
-                (int)(Math.random() * 255),
-                (int)(Math.random() * 255)
+                (int) (Math.random() * 255),
+                (int) (Math.random() * 255),
+                (int) (Math.random() * 255)
         );
     }
 
@@ -71,13 +71,14 @@ public class Polygon {
         return true;
     }
 
-     // Векторное произведение для определения ориентации
+    // Векторное произведение для определения ориентации
     private double crossProduct(Point2D.Double a, Point2D.Double b, Point2D.Double c) {
         return (b.x - a.x) * (c.y - b.y) - (b.y - a.y) * (c.x - b.x);
     }
 
     /**
      * Определяет положение точки относительно ребра
+     *
      * @return >0 - слева, <0 - справа, =0 - на прямой
      */
     public double pointRelativeToEdge(Point2D.Double a, Point2D.Double b, Point2D.Double p) {
@@ -108,7 +109,7 @@ public class Polygon {
         return contains;
     }
 
-     //Получает классификацию положения точки относительно каждого ребра
+    //Получает классификацию положения точки относительно каждого ребра
     public List<String> getPointEdgeClassifications(Point2D.Double testPoint) {
         List<String> classifications = new ArrayList<>();
 
@@ -129,7 +130,7 @@ public class Polygon {
         return classifications;
     }
 
-      // Проверяет положение произвольной точки относительно конкретного ребра
+    // Проверяет положение произвольной точки относительно конкретного ребра
     public String checkPointAgainstEdge(Point2D.Double testPoint, int edgeIndex) {
         if (vertices.size() < 2 || edgeIndex < 0 || edgeIndex >= vertices.size()) {
             return "Некорректный индекс ребра";
@@ -150,5 +151,91 @@ public class Polygon {
             return String.format("Точка (%.1f, %.1f) находится НА ребре %d",
                     testPoint.x, testPoint.y, edgeIndex + 1);
         }
+    }
+
+    private Point2D.Double multiplyMatrixByVector(double[][] matrix, Point2D.Double point) {
+        double x = point.x;
+        double y = point.y;
+
+        double newX = matrix[0][0] * x + matrix[0][1] * y + matrix[0][2] * 1;
+        double newY = matrix[1][0] * x + matrix[1][1] * y + matrix[1][2] * 1;
+
+        return new Point2D.Double(newX, newY);
+    }
+
+    public void transform(double[][] transformMatrix) {
+        List<Point2D.Double> newVertices = new ArrayList<>();
+        for (Point2D.Double vertex : vertices) {
+            newVertices.add(multiplyMatrixByVector(transformMatrix, vertex));
+        }
+        vertices.clear();
+        vertices.addAll(newVertices);
+    }
+
+    public Point2D.Double getCenter() {
+        double centerX = 0, centerY = 0;
+        if (vertices.isEmpty()) return new Point2D.Double(0, 0);
+
+        for (Point2D.Double vertex : vertices) {
+            centerX += vertex.x;
+            centerY += vertex.y;
+        }
+        return new Point2D.Double(centerX / vertices.size(), centerY / vertices.size());
+    }
+
+    public double dot(Point2D.Double p1, Point2D.Double p2) {
+        return p1.x * p2.x + p1.y * p2.y;
+    }
+
+    public Point2D.Double subtract(Point2D.Double p1, Point2D.Double p2) {
+        return new Point2D.Double(p1.x - p2.x, p1.y - p2.y);
+    }
+
+    public Point2D.Double getNormal(Point2D p){
+        return new Point2D.Double(-p.getY(), p.getX());
+    }
+
+    public Point2D.Double findIntersection(Point2D.Double a, Point2D.Double b, Point2D.Double c, Point2D.Double d) {
+        Point2D.Double v_ab = subtract(b, a);
+        Point2D.Double v_cd = subtract(d, c);
+        Point2D.Double v_ac = subtract(a, c);
+
+        Point2D.Double n = getNormal(v_cd);
+        double denominator = dot(n, v_ab);
+
+        double epsilon = 1e-9;
+        if (Math.abs(denominator) < epsilon) {
+            return null;
+        }
+
+        double numerator = -dot(n, v_ac);
+
+        double t = numerator / denominator;
+
+        if (t < 0 || t > 1) {
+            return null;
+        }
+
+        double p_x = a.x + t * v_ab.x;
+        double p_y = a.y + t * v_ab.y;
+        Point2D.Double intersection = new Point2D.Double(p_x, p_y);
+
+        double u_numerator = dot(v_cd, subtract(intersection, c));
+        double u_denominator = dot(v_cd, v_cd);
+
+        if (Math.abs(u_denominator) < epsilon) {
+            if (Math.abs(intersection.x - c.x) < epsilon && Math.abs(intersection.y - c.y) < epsilon) {
+                return c;
+            }
+            return null;
+        }
+
+        double u = u_numerator / u_denominator;
+
+        if (u >= 0 && u <= 1) {
+            return intersection;
+        }
+
+        return null;
     }
 }
