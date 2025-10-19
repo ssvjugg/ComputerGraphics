@@ -12,7 +12,7 @@ public class MainFrame extends JFrame {
     private LSystem currentLSystem;
 
     public MainFrame() {
-        setTitle("L-системы: Фрактальные узоры");
+        setTitle("L-системы: Фрактальные узоры с улучшенными деревьями");
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         setSize(1000, 800);
         setLocationRelativeTo(null);
@@ -21,7 +21,7 @@ public class MainFrame extends JFrame {
         createTestFiles();
 
         // Автозагрузка снежинки Коха при запуске
-        loadFractal("koch.txt", 4, 1.0, false);
+        loadFractal("koch.txt", 4, 1.0, false, false);
     }
 
     private void initializeComponents() {
@@ -32,13 +32,15 @@ public class MainFrame extends JFrame {
 
         // Выбор фрактала
         JComboBox<String> fractalCombo = new JComboBox<>(new String[]{
-                "Снежинка Коха", "Кривая дракона", "Дерево 1", "Дерево 2", "Квадратный остров Коха"
+                "Снежинка Коха", "Кривая дракона", "Дерево 1", "Дерево 2",
+                "Дерево 3 (улучшенное)", "Дерево 4 (улучшенное)", "Куст (улучшенный)"
         });
 
         // Параметры
         JSpinner iterSpinner = new JSpinner(new SpinnerNumberModel(4, 1, 8, 1));
-        JSpinner scaleSpinner = new JSpinner(new SpinnerNumberModel(1.0, 0.01, 5.0, 0.1)); // Увеличил диапазон
+        JSpinner scaleSpinner = new JSpinner(new SpinnerNumberModel(1.0, 0.01, 5.0, 0.1));
         JCheckBox randomCheckbox = new JCheckBox("Случайность");
+        JCheckBox enhancedCheckbox = new JCheckBox("Улучшенное дерево");
 
         // Кнопка генерации
         JButton generateButton = new JButton("Сгенерировать");
@@ -52,8 +54,9 @@ public class MainFrame extends JFrame {
             int iterations = (Integer) iterSpinner.getValue();
             double scale = (Double) scaleSpinner.getValue();
             boolean useRandomness = randomCheckbox.isSelected();
+            boolean useEnhanced = enhancedCheckbox.isSelected() && isTreeFractal(selectedFractal);
 
-            loadFractal(filename, iterations, scale, useRandomness);
+            loadFractal(filename, iterations, scale, useRandomness, useEnhanced);
         });
 
         // Кнопка сброса масштаба
@@ -81,6 +84,8 @@ public class MainFrame extends JFrame {
 
         controlPanel.add(randomCheckbox);
         controlPanel.add(Box.createHorizontalStrut(10));
+        controlPanel.add(enhancedCheckbox);
+        controlPanel.add(Box.createHorizontalStrut(10));
         controlPanel.add(generateButton);
         controlPanel.add(Box.createHorizontalStrut(5));
         controlPanel.add(resetScaleButton);
@@ -91,16 +96,17 @@ public class MainFrame extends JFrame {
         add(fractalPanel, BorderLayout.CENTER);
 
         // Информационная панель
-        JLabel infoLabel = new JLabel("Итерации: детализация | Масштаб: относительный размер | Сброс: вернуть масштаб 1.0");
+        JLabel infoLabel = new JLabel("Улучшенное дерево: толщина ствола → тонкие ветки | коричневый → зеленый | случайные углы");
         infoLabel.setHorizontalAlignment(SwingConstants.CENTER);
         infoLabel.setForeground(Color.GRAY);
         infoLabel.setBorder(BorderFactory.createEmptyBorder(5, 0, 5, 0));
         add(infoLabel, BorderLayout.SOUTH);
     }
 
-    private void loadFractal(String filename, int iterations, double scale, boolean useRandomness) {
+    private void loadFractal(String filename, int iterations, double scale, boolean useRandomness, boolean useEnhanced) {
         try {
             currentLSystem = LSystemParser.parseFromFile(filename);
+            currentLSystem.setUseThicknessAndColor(useEnhanced);
             currentLSystem.generate(iterations, 10.0, useRandomness);
             fractalPanel.setLSystem(currentLSystem);
             fractalPanel.setScale(scale);
@@ -118,41 +124,41 @@ public class MainFrame extends JFrame {
             case "Кривая дракона": return "dragon.txt";
             case "Дерево 1": return "tree1.txt";
             case "Дерево 2": return "tree2.txt";
-            case "Квадратный остров Коха": return "koch_island.txt";
+            case "Дерево 3 (улучшенное)": return "tree3_enhanced.txt";
+            case "Дерево 4 (улучшенное)": return "tree4_enhanced.txt";
+            case "Куст (улучшенный)": return "bush_enhanced.txt";
             default: return "koch.txt";
         }
     }
 
+    private boolean isTreeFractal(String fractalName) {
+        return fractalName.contains("Дерево") || fractalName.contains("Куст");
+    }
+
     private void createTestFiles() {
-        // Снежинка Коха
-        String kochSnowflake = "F 60 0\n" +
-                "F->F-F++F-F";
+        // Существующие фракталы
+        String kochSnowflake = "F 60 0\nF->F-F++F-F";
+        String dragonCurve = "X 90 0\nX->X+YF+\nY->-FX-Y";
+        String tree1 = "X 20 90\nF->FF\nX->F[+X]F[-X]+X";
+        String tree2 = "X 22.5 90\nF->FF\nX->F[+X][-X]FX";
 
-        // Кривая дракона
-        String dragonCurve = "X 90 0\n" +
-                "X->X+YF+\n" +
-                "Y->-FX-Y";
-
-        // Дерево 1
-        String tree1 = "X 20 90\n" +
-                "F->FF\n" +
-                "X->F[+X]F[-X]+X";
-
-        // Дерево 2
-        String tree2 = "X 22.5 90\n" +
-                "F->FF\n" +
-                "X->F[+X][-X]FX";
-
-        // Квадратный остров Коха
-        String kochIsland = "F 90 0\n" +
-                "F->F+F-F-FF+F+F-F";
+        // Новые улучшенные деревья
+        String tree3Enhanced = "X 25 90\nF->FF\nX->F[+X][-X]F[+X][-X]FX";
+        String tree4Enhanced = "X 30 90\nF->FF\nX->F[+FX][-FX][+FX][-FX]X";
+        String bushEnhanced = "X 35 90\nF->FF\nX->F[+X][-X][+X][-X]F[+X][-X]X";
 
         try {
+            // Старые файлы
             java.nio.file.Files.write(java.nio.file.Paths.get("koch.txt"), kochSnowflake.getBytes());
             java.nio.file.Files.write(java.nio.file.Paths.get("dragon.txt"), dragonCurve.getBytes());
             java.nio.file.Files.write(java.nio.file.Paths.get("tree1.txt"), tree1.getBytes());
             java.nio.file.Files.write(java.nio.file.Paths.get("tree2.txt"), tree2.getBytes());
-            java.nio.file.Files.write(java.nio.file.Paths.get("koch_island.txt"), kochIsland.getBytes());
+
+            // Новые улучшенные файлы
+            java.nio.file.Files.write(java.nio.file.Paths.get("tree3_enhanced.txt"), tree3Enhanced.getBytes());
+            java.nio.file.Files.write(java.nio.file.Paths.get("tree4_enhanced.txt"), tree4Enhanced.getBytes());
+            java.nio.file.Files.write(java.nio.file.Paths.get("bush_enhanced.txt"), bushEnhanced.getBytes());
+
             System.out.println("Тестовые файлы созданы!");
         } catch (IOException e) {
             System.err.println("Ошибка создания тестовых файлов: " + e.getMessage());

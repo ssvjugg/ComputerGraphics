@@ -1,18 +1,13 @@
 package ru.usernamedrew.ui;
 
 import ru.usernamedrew.lsystem.LSystem;
+import ru.usernamedrew.models.LineSegment;
 import ru.usernamedrew.models.Point;
 
 import javax.swing.*;
 import java.awt.*;
 import java.awt.geom.Path2D;
 import java.util.List;
-
-//Что делает:
-//
-//Получает точки от LSystem
-//Автоматически подгоняет размер под окно
-//Рисует линии между точками
 
 public class LSystemFractalPanel extends JPanel {
     private LSystem lsystem;
@@ -38,21 +33,21 @@ public class LSystemFractalPanel extends JPanel {
         Graphics2D g2d = (Graphics2D) g;
         g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
 
-        if (lsystem == null || lsystem.getPoints().isEmpty()) {
+        if (lsystem == null || lsystem.getSegments().isEmpty()) {
             return;
         }
 
-        List<Point> points = lsystem.getPoints();
+        List<LineSegment> segments = lsystem.getSegments();
 
         // Находим границы фигуры
         double minX = Double.MAX_VALUE, minY = Double.MAX_VALUE;
         double maxX = Double.MIN_VALUE, maxY = Double.MIN_VALUE;
 
-        for (Point p : points) {
-            minX = Math.min(minX, p.x);
-            minY = Math.min(minY, p.y);
-            maxX = Math.max(maxX, p.x);
-            maxY = Math.max(maxY, p.y);
+        for (LineSegment segment : segments) {
+            minX = Math.min(minX, Math.min(segment.start.x, segment.end.x));
+            minY = Math.min(minY, Math.min(segment.start.y, segment.end.y));
+            maxX = Math.max(maxX, Math.max(segment.start.x, segment.end.x));
+            maxY = Math.max(maxY, Math.max(segment.start.y, segment.end.y));
         }
 
         // Вычисляем размеры фигуры и панели
@@ -62,16 +57,11 @@ public class LSystemFractalPanel extends JPanel {
         double panelHeight = getHeight();
 
         // Автоматическое масштабирование + ручной масштаб
-        double autoScaleX = panelWidth * 0.8 / figureWidth;  // 80% ширины панели
-        double autoScaleY = panelHeight * 0.8 / figureHeight; // 80% высоты панели
-
-        // Автоматическое масштабирование: "Впиши фигуру в 80% окна"
-        // double autoScale = Math.min(ширинаОкна/ширинаФигуры, высотаОкна/высотаФигуры);
+        double autoScaleX = panelWidth * 0.8 / figureWidth;
+        double autoScaleY = panelHeight * 0.8 / figureHeight;
         double autoScale = Math.min(autoScaleX, autoScaleY);
 
         // Комбинируем автоматическое и ручное масштабирование
-        // Ручное масштабирование: "Умножь на коэффициент пользователя"
-//        double finalScale = autoScale * ручнойМасштаб;
         double finalScale = autoScale * scale;
 
         // Центры
@@ -80,40 +70,20 @@ public class LSystemFractalPanel extends JPanel {
         double panelCenterX = panelWidth / 2;
         double panelCenterY = panelHeight / 2;
 
-        // Создаем путь
-        Path2D path = new Path2D.Double();
-        boolean firstPoint = true;
+        // Рисуем каждый отрезок с его атрибутами
+        for (LineSegment segment : segments) {
+            // Преобразуем координаты
+            double x1 = panelCenterX + (segment.start.x - figureCenterX) * finalScale;
+            double y1 = panelCenterY + (segment.start.y - figureCenterY) * finalScale;
+            double x2 = panelCenterX + (segment.end.x - figureCenterX) * finalScale;
+            double y2 = panelCenterY + (segment.end.y - figureCenterY) * finalScale;
 
-        g2d.setColor(Color.BLUE);
-        g2d.setStroke(new BasicStroke(1.5f));
+            // Устанавливаем толщину и цвет
+            g2d.setColor(segment.color);
+            g2d.setStroke(new BasicStroke((float) Math.max(0.5, segment.thickness * finalScale)));
 
-        for (int i = 0; i < points.size(); i += 2) {
-            if (i + 1 < points.size()) {
-                Point p1 = points.get(i);
-                Point p2 = points.get(i + 1);
-
-                // Преобразуем координаты с учетом масштаба и центрирования
-                double x1 = panelCenterX + (p1.x - figureCenterX) * finalScale;
-                double y1 = panelCenterY + (p1.y - figureCenterY) * finalScale;
-                double x2 = panelCenterX + (p2.x - figureCenterX) * finalScale;
-                double y2 = panelCenterY + (p2.y - figureCenterY) * finalScale;
-
-                if (firstPoint) {
-                    path.moveTo(x1, y1);
-                    firstPoint = false;
-                }
-                path.lineTo(x2, y2);
-            }
-        }
-
-        g2d.draw(path);
-
-        // Отладочная информация (можно убрать)
-        if (scale < 0.3) {
-            g2d.setColor(Color.RED);
-            g2d.setFont(new Font("Arial", Font.PLAIN, 12));
-            g2d.drawString("Масштаб: " + String.format("%.2f", scale) +
-                    " | Авто-масштаб: " + String.format("%.2f", autoScale), 10, 20);
+            // Рисуем линию
+            g2d.drawLine((int) x1, (int) y1, (int) x2, (int) y2);
         }
     }
 }
