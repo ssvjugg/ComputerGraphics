@@ -69,6 +69,16 @@ public class MainFrame extends JFrame {
             }
         });
 
+        JButton bezierButton = new JButton("Сплайны Безье");
+        bezierButton.setBackground(new Color(100, 150, 200));
+        bezierButton.setForeground(Color.WHITE);
+        bezierButton.addActionListener(e -> {
+            BezierFrame bezierFrame = new BezierFrame();
+            bezierFrame.setVisible(true);
+        });
+
+        controlPanel.add(bezierButton);
+
         // Добавляем компоненты на панель
         controlPanel.add(new JLabel("Фрактал:"));
         controlPanel.add(fractalCombo);
