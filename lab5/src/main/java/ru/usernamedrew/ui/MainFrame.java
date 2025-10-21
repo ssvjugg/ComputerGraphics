@@ -6,6 +6,8 @@ import ru.usernamedrew.lsystem.LSystemParser;
 import javax.swing.*;
 import java.awt.*;
 import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Paths;
 
 public class MainFrame extends JFrame {
     private LSystemFractalPanel fractalPanel;
@@ -14,7 +16,7 @@ public class MainFrame extends JFrame {
     public MainFrame() {
         setTitle("L-системы: Фрактальные узоры с улучшенными деревьями");
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
-        setSize(1000, 800);
+        setSize(1200, 800);
         setLocationRelativeTo(null);
 
         initializeComponents();
@@ -130,7 +132,6 @@ public class MainFrame extends JFrame {
 
     private String getFilenameForFractal(String fractalName) {
         switch (fractalName) {
-            case "Снежинка Коха": return "koch.txt";
             case "Кривая дракона": return "dragon.txt";
             case "Дерево 1": return "tree1.txt";
             case "Дерево 2": return "tree2.txt";
@@ -159,15 +160,15 @@ public class MainFrame extends JFrame {
 
         try {
             // Старые файлы
-            java.nio.file.Files.write(java.nio.file.Paths.get("koch.txt"), kochSnowflake.getBytes());
-            java.nio.file.Files.write(java.nio.file.Paths.get("dragon.txt"), dragonCurve.getBytes());
-            java.nio.file.Files.write(java.nio.file.Paths.get("tree1.txt"), tree1.getBytes());
-            java.nio.file.Files.write(java.nio.file.Paths.get("tree2.txt"), tree2.getBytes());
+            Files.write(Paths.get("koch.txt"), kochSnowflake.getBytes());
+            Files.write(Paths.get("dragon.txt"), dragonCurve.getBytes());
+            Files.write(Paths.get("tree1.txt"), tree1.getBytes());
+            Files.write(Paths.get("tree2.txt"), tree2.getBytes());
 
             // Новые улучшенные файлы
-            java.nio.file.Files.write(java.nio.file.Paths.get("tree3_enhanced.txt"), tree3Enhanced.getBytes());
-            java.nio.file.Files.write(java.nio.file.Paths.get("tree4_enhanced.txt"), tree4Enhanced.getBytes());
-            java.nio.file.Files.write(java.nio.file.Paths.get("bush_enhanced.txt"), bushEnhanced.getBytes());
+            Files.write(Paths.get("tree3_enhanced.txt"), tree3Enhanced.getBytes());
+            Files.write(Paths.get("tree4_enhanced.txt"), tree4Enhanced.getBytes());
+            Files.write(Paths.get("bush_enhanced.txt"), bushEnhanced.getBytes());
 
             System.out.println("Тестовые файлы созданы!");
         } catch (IOException e) {

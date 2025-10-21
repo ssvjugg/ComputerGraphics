@@ -8,7 +8,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class BezierSpline extends JPanel {
-    private List<Point2D.Double> controlPoints = new ArrayList<>();
+    private final List<Point2D.Double> controlPoints = new ArrayList<>();
     private Point2D.Double selectedPoint = null;
     private boolean showControlLines = true;
     private boolean showControlPoints = true;
