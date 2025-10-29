@@ -65,9 +65,10 @@ public class MainFrame extends JFrame {
 
         projectionCombo.addActionListener(e -> {
             String selected = (String) projectionCombo.getSelectedItem();
-            assert selected != null;
-            String projectionType = selected.equals("Аксонометрическая") ? "axonometric" : "perspective";
-            graphicsPanel.setProjectionType(projectionType);
+            if (selected != null) {
+                String projectionType = selected.equals("Аксонометрическая") ? "axonometric" : "perspective";
+                graphicsPanel.setProjectionType(projectionType);
+            }
         });
 
         // Кнопки преобразований
@@ -109,6 +110,9 @@ public class MainFrame extends JFrame {
         String zStr = JOptionPane.showInputDialog("Введите смещение по Z:");
 
         try {
+            if (xStr == null || yStr == null || zStr == null) {
+                return;
+            }
             double dx = Double.parseDouble(xStr);
             double dy = Double.parseDouble(yStr);
             double dz = Double.parseDouble(zStr);
@@ -127,6 +131,9 @@ public class MainFrame extends JFrame {
         String scaleStr = JOptionPane.showInputDialog("Введите коэффициент масштабирования:");
 
         try {
+            if (scaleStr == null || scaleStr.isEmpty()) {
+                return;
+            }
             double scale = Double.parseDouble(scaleStr);
 
             // Масштабирование относительно центра
@@ -156,6 +163,9 @@ public class MainFrame extends JFrame {
         String angleStr = JOptionPane.showInputDialog("Введите угол в градусах:");
 
         try {
+            if (angleStr == null || angleStr.isEmpty()) {
+                return;
+            }
             double angle = Math.toRadians(Double.parseDouble(angleStr));
             double[][] rotationMatrix;
 
@@ -208,6 +218,9 @@ public class MainFrame extends JFrame {
         String angleStr = JOptionPane.showInputDialog(this, "Введите угол в градусах:");
 
         try {
+            if (axStr == null || ayStr == null || azStr == null || vxStr == null || vyStr == null) {
+                return;
+            }
             double ax = Double.parseDouble(axStr);
             double ay = Double.parseDouble(ayStr);
             double az = Double.parseDouble(azStr);
