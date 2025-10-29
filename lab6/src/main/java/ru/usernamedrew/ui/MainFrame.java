@@ -83,6 +83,9 @@ public class MainFrame extends JFrame {
         JButton reflectBtn = new JButton("Отражение");
         reflectBtn.addActionListener(this::handleReflection);
 
+        JButton arbitraryRotateBtn = new JButton("Вращение по произвольной оси");
+        arbitraryRotateBtn.addActionListener(this::handleArbitraryRotation);
+
         // Добавляем компоненты
         panel.add(new JLabel("Многогранник:"));
         panel.add(polyhedronCombo);
@@ -92,6 +95,8 @@ public class MainFrame extends JFrame {
         panel.add(scaleBtn);
         panel.add(rotateBtn);
         panel.add(reflectBtn);
+
+        panel.add(arbitraryRotateBtn);
 
         return panel;
     }
@@ -161,8 +166,6 @@ public class MainFrame extends JFrame {
                 default -> rotationMatrix = AffineTransform.createIdentityMatrix();
             }
 
-            // Вращение вокруг центра
-            Point3D center = AffineTransform.getCenter(currentPolyhedron.getVertices());
             double[][] transform = AffineTransform.multiplyMatrices(
                     AffineTransform.createTranslationMatrix(-fixedRotationCenter.x(), -fixedRotationCenter.y(), -fixedRotationCenter.z()),
                     AffineTransform.multiplyMatrices(
@@ -189,5 +192,51 @@ public class MainFrame extends JFrame {
         double[][] matrix = AffineTransform.createReflectionMatrix(planeCode);
         currentPolyhedron = currentPolyhedron.transform(matrix);
         graphicsPanel.setPolyhedron(currentPolyhedron);
+    }
+
+    private void handleArbitraryRotation(ActionEvent e) {
+        if (currentPolyhedron == null) return;
+
+        String axStr = JOptionPane.showInputDialog(this, "Введите координату A.x:");
+        String ayStr = JOptionPane.showInputDialog(this, "Введите координату A.y:");
+        String azStr = JOptionPane.showInputDialog(this, "Введите координату A.z:");
+
+        String vxStr = JOptionPane.showInputDialog(this, "Введите компоненту V.l (X):");
+        String vyStr = JOptionPane.showInputDialog(this, "Введите компоненту V.m (Y):");
+        String vzStr = JOptionPane.showInputDialog(this, "Введите компоненту V.n (Z):");
+
+        String angleStr = JOptionPane.showInputDialog(this, "Введите угол в градусах:");
+
+        try {
+            double ax = Double.parseDouble(axStr);
+            double ay = Double.parseDouble(ayStr);
+            double az = Double.parseDouble(azStr);
+            Point3D A = new Point3D(ax, ay, az);
+
+            double vx = Double.parseDouble(vxStr);
+            double vy = Double.parseDouble(vyStr);
+            double vz = Double.parseDouble(vzStr);
+            double angle = Math.toRadians(Double.parseDouble(angleStr));
+
+            Point3D V = normalizeVector(new Point3D(vx, vy, vz));
+
+            double[][] matrix = AffineTransform.createRotationAroundArbitraryAxis(A, V, angle);
+
+            currentPolyhedron = currentPolyhedron.transform(matrix);
+            graphicsPanel.setPolyhedron(currentPolyhedron);
+
+        } catch (NumberFormatException ex) {
+            JOptionPane.showMessageDialog(this, "Ошибка.");
+        }
+    }
+
+    private Point3D normalizeVector(Point3D V) {
+        double length = Math.sqrt(V.x() * V.x() + V.y() * V.y() + V.z() * V.z());
+
+        if (length < 1e-9) {
+            return new Point3D(0, 0, 1);
+        }
+
+        return new Point3D(V.x() / length, V.y() / length, V.z() / length);
     }
 }
