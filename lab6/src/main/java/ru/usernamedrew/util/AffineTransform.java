@@ -164,7 +164,7 @@ public class AffineTransform {
 
         if (r > 1e-6) {
             double cosBeta = r;
-            double sinBeta = -l;
+            double sinBeta = l;
             double beta = Math.atan2(sinBeta, cosBeta);
 
             Ry = createRotationYMatrix(beta);
