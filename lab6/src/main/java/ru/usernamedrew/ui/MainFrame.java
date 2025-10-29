@@ -10,6 +10,7 @@ import java.awt.event.ActionEvent;
 public class MainFrame extends JFrame {
     private GraphicsPanel graphicsPanel;
     private Polyhedron currentPolyhedron;
+    private Point3D fixedRotationCenter;
 
     public MainFrame() {
         initializeUI();
@@ -47,6 +48,13 @@ public class MainFrame extends JFrame {
                 case "Гексаэдр" -> currentPolyhedron = RegularPolyhedra.createHexahedron();
                 case "Октаэдр" -> currentPolyhedron = RegularPolyhedra.createOctahedron();
             }
+            if (currentPolyhedron != null) {
+                // Вычисляем центр исходной модели и сохраняем его
+                fixedRotationCenter = AffineTransform.getCenter(currentPolyhedron.getVertices());
+            } else {
+                fixedRotationCenter = null;
+            }
+
             graphicsPanel.setPolyhedron(currentPolyhedron);
         });
 
@@ -57,7 +65,9 @@ public class MainFrame extends JFrame {
 
         projectionCombo.addActionListener(e -> {
             String selected = (String) projectionCombo.getSelectedItem();
-            graphicsPanel.setProjectionType(selected.toLowerCase());
+            assert selected != null;
+            String projectionType = selected.equals("Аксонометрическая") ? "axonometric" : "perspective";
+            graphicsPanel.setProjectionType(projectionType);
         });
 
         // Кнопки преобразований
@@ -117,10 +127,10 @@ public class MainFrame extends JFrame {
             // Масштабирование относительно центра
             Point3D center = AffineTransform.getCenter(currentPolyhedron.getVertices());
             double[][] transform = AffineTransform.multiplyMatrices(
-                    AffineTransform.createTranslationMatrix(-center.x(), -center.y(), -center.z()),
+                    AffineTransform.createTranslationMatrix(-fixedRotationCenter.x(), -fixedRotationCenter.y(), -fixedRotationCenter.z()),
                     AffineTransform.multiplyMatrices(
                             AffineTransform.createScalingMatrix(scale, scale, scale),
-                            AffineTransform.createTranslationMatrix(center.x(), center.y(), center.z())
+                            AffineTransform.createTranslationMatrix(fixedRotationCenter.x(), fixedRotationCenter.y(), fixedRotationCenter.z())
                     )
             );
 
@@ -154,10 +164,10 @@ public class MainFrame extends JFrame {
             // Вращение вокруг центра
             Point3D center = AffineTransform.getCenter(currentPolyhedron.getVertices());
             double[][] transform = AffineTransform.multiplyMatrices(
-                    AffineTransform.createTranslationMatrix(-center.x(), -center.y(), -center.z()),
+                    AffineTransform.createTranslationMatrix(-fixedRotationCenter.x(), -fixedRotationCenter.y(), -fixedRotationCenter.z()),
                     AffineTransform.multiplyMatrices(
                             rotationMatrix,
-                            AffineTransform.createTranslationMatrix(center.x(), center.y(), center.z())
+                            AffineTransform.createTranslationMatrix(fixedRotationCenter.x(), fixedRotationCenter.y(), fixedRotationCenter.z())
                     )
             );
 

@@ -1,6 +1,8 @@
 package ru.usernamedrew.model;
 
 public record Point3D(double x, double y, double z) {
+    private static final double EPSILON = 1e-9;
+
     // Аффинные преобразования
     public Point3D transform(double[][] matrix) {
         double xNew = matrix[0][0] * x + matrix[0][1] * y + matrix[0][2] * z + matrix[0][3];
@@ -8,10 +10,12 @@ public record Point3D(double x, double y, double z) {
         double zNew = matrix[2][0] * x + matrix[2][1] * y + matrix[2][2] * z + matrix[2][3];
         double w = matrix[3][0] * x + matrix[3][1] * y + matrix[3][2] * z + matrix[3][3];
 
-        if (w != 0 && w != 1) {
-            xNew /= w;
-            yNew /= w;
-            zNew /= w;
+        if (Math.abs(w - 1.0) > EPSILON) {
+            if (Math.abs(w) > EPSILON) {
+                xNew /= w;
+                yNew /= w;
+                zNew /= w;
+            }
         }
 
         return new Point3D(xNew, yNew, zNew);

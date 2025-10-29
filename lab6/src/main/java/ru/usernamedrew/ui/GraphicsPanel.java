@@ -1,6 +1,7 @@
 package ru.usernamedrew.ui;
 
 import ru.usernamedrew.model.*;
+import ru.usernamedrew.util.AffineTransform;
 
 import javax.swing.*;
 import java.awt.*;
@@ -53,18 +54,42 @@ public class GraphicsPanel extends JPanel {
         drawPolyhedron(g2d);
     }
 
+
+    //отрисовка координатных осей
     private void drawCoordinateAxes(Graphics2D g2d) {
+        //делаем все теже матричные преобразования как и для многогранника
+        double axisLength = 3.0;
+
+        Point3D origin3D = new Point3D(0, 0, 0);
+
+        Point3D xAxisEnd3D = new Point3D(axisLength, 0, 0);
+        Point3D yAxisEnd3D = new Point3D(0, axisLength, 0);
+        Point3D zAxisEnd3D = new Point3D(0, 0, axisLength);
+
+        Point2D origin2D = projectPoint(origin3D);
+        Point2D xAxisEnd2D = projectPoint(xAxisEnd3D);
+        Point2D yAxisEnd2D = projectPoint(yAxisEnd3D);
+        Point2D zAxisEnd2D = projectPoint(zAxisEnd3D);
+
+        int ox = (int) origin2D.getX();
+        int oy = (int) origin2D.getY();
+
         g2d.setColor(Color.RED);
-        g2d.drawLine(centerX, centerY, centerX + 100, centerY); // X axis
+        g2d.drawLine(ox, oy, (int) xAxisEnd2D.getX(), (int) xAxisEnd2D.getY());
+
         g2d.setColor(Color.GREEN);
-        g2d.drawLine(centerX, centerY, centerX, centerY - 100); // Y axis
+        g2d.drawLine(ox, oy, (int) yAxisEnd2D.getX(), (int) yAxisEnd2D.getY());
+
         g2d.setColor(Color.BLUE);
-        g2d.drawLine(centerX, centerY, centerX, centerY + 100); // Z axis
+        g2d.drawLine(ox, oy, (int) zAxisEnd2D.getX(), (int) zAxisEnd2D.getY());
 
         g2d.setColor(Color.BLACK);
-        g2d.drawString("X", centerX + 105, centerY);
-        g2d.drawString("Y", centerX, centerY - 105);
-        g2d.drawString("Z", centerX, centerY + 105);
+
+        g2d.drawString("X", (int) xAxisEnd2D.getX() + 5, (int) xAxisEnd2D.getY());
+
+        g2d.drawString("Y", (int) yAxisEnd2D.getX() - 5, (int) yAxisEnd2D.getY() - 5);
+
+        g2d.drawString("Z", (int) zAxisEnd2D.getX() + 5, (int) zAxisEnd2D.getY() + 5);
     }
 
     private void drawPolyhedron(Graphics2D g2d) {
@@ -92,25 +117,21 @@ public class GraphicsPanel extends JPanel {
     }
 
     private Point2D projectPoint(Point3D point3d) {
-        double x = point3d.x() * scale;
-        double y = point3d.y() * scale;
-        double z = point3d.z() * scale;
+        Point3D scaledPoint = new Point3D(point3d.x() * scale, point3d.y() * scale, point3d.z() * scale);
+
+        double[][] projectionMatrix;
 
         if ("perspective".equals(projectionType)) {
             // Перспективная проекция
-            double distance = 5;
-            double factor = distance / (distance - z);
-            x = x * factor;
-            y = y * factor;
+            double distance = 500;
+            projectionMatrix = AffineTransform.createPerspectiveProjectionMatrix(distance);
         } else {
-            // Аксонометрическая проекция
-            double angle = Math.PI / 6; // 30 градусов
-            double xTemp = x * Math.cos(angle) - z * Math.sin(angle);
-            double zTemp = x * Math.sin(angle) + z * Math.cos(angle);
-            x = xTemp;
-            z = zTemp;
+            double angle = Math.PI / 6;
+
+            projectionMatrix = AffineTransform.createAxonometricProjectionMatrix(angle);
         }
 
-        return new Point2D.Double(centerX + x, centerY - y);
+        Point3D projectedPoint = scaledPoint.transform(projectionMatrix);
+        return new Point2D.Double(centerX + projectedPoint.x(), centerY - projectedPoint.y());
     }
 }

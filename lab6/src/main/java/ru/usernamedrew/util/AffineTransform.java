@@ -113,4 +113,26 @@ public class AffineTransform {
         int count = points.size();
         return new Point3D(sumX / count, sumY / count, sumZ / count);
     }
+
+    public static double[][] createAxonometricProjectionMatrix(double angle) {
+        double cosA = Math.cos(angle);
+        double sinA = Math.sin(angle);
+        double factor = 0.5;
+
+        return new double[][] {
+                {cosA, 0, sinA, 0},
+                {sinA * factor, 1, -cosA * factor, 0},
+                {0, 0, 0, 0},
+                {0, 0, 0, 1}
+        };
+    }
+
+    public static double[][] createPerspectiveProjectionMatrix(double distance) {
+        return new double[][] {
+                {1, 0, 0, 0},
+                {0, 1, 0, 0},
+                {0, 0, 1, 0},
+                {0, 0, -1.0 / distance, 1}
+        };
+    }
 }
