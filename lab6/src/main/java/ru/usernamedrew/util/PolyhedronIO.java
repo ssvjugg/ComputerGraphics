@@ -5,6 +5,7 @@ import ru.usernamedrew.model.*;
 
 import java.io.*;
 import java.util.List;
+import java.util.Locale;
 
 public class PolyhedronIO {
 
@@ -24,7 +25,7 @@ public class PolyhedronIO {
             // Записываем вершины (v x y z)
             writer.println("# Vertex list");
             for (Point3D vertex : polyhedron.getVertices()) {
-                writer.printf("v %.6f %.6f %.6f%n", vertex.x(), vertex.y(), vertex.z());
+                writer.printf(Locale.US,"v %.6f %.6f %.6f%n", vertex.x(), vertex.y(), vertex.z());
             }
 
             writer.println();
