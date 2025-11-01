@@ -1,76 +1,95 @@
-// новый класс для сохранения и загрузки моделей
+// PolyhedronIO.java - полностью переработанный класс для формата OBJ
 package ru.usernamedrew.util;
 
 import ru.usernamedrew.model.*;
 
 import java.io.*;
-import java.util.ArrayList;
 import java.util.List;
 
 public class PolyhedronIO {
 
     public static void saveToFile(Polyhedron polyhedron, String filename) throws IOException {
+        // Добавляем расширение .obj если его нет
+        if (!filename.toLowerCase().endsWith(".obj")) {
+            filename += ".obj";
+        }
+
         try (PrintWriter writer = new PrintWriter(new FileWriter(filename))) {
-            // Записываем вершины
-            writer.println("VERTICES:");
+            // Записываем комментарий
+            writer.println("# 3D Model exported from Java 3D Application");
+            writer.println("# Vertices: " + polyhedron.getVertices().size());
+            writer.println("# Faces: " + polyhedron.getFaces().size());
+            writer.println();
+
+            // Записываем вершины (v x y z)
+            writer.println("# Vertex list");
             for (Point3D vertex : polyhedron.getVertices()) {
-                writer.printf("%f %f %f%n", vertex.x(), vertex.y(), vertex.z());
+                writer.printf("v %.6f %.6f %.6f%n", vertex.x(), vertex.y(), vertex.z());
             }
 
-            // Записываем грани
-            writer.println("FACES:");
+            writer.println();
+
+            // Записываем грани (f v1 v2 v3 ...)
+            writer.println("# Face list");
             for (Face face : polyhedron.getFaces()) {
-                StringBuilder faceLine = new StringBuilder();
+                StringBuilder faceLine = new StringBuilder("f");
                 for (Point3D vertex : face.getVertices()) {
-                    int vertexIndex = polyhedron.getVertices().indexOf(vertex);
-                    if (vertexIndex != -1) {
-                        faceLine.append(vertexIndex).append(" ");
-                    }
+                    int vertexIndex = polyhedron.getVertices().indexOf(vertex) + 1; // OBJ индексы начинаются с 1
+                    faceLine.append(" ").append(vertexIndex);
                 }
-                writer.println(faceLine.toString().trim());
+                writer.println(faceLine.toString());
             }
         }
     }
 
     public static Polyhedron loadFromFile(String filename) throws IOException {
         try (BufferedReader reader = new BufferedReader(new FileReader(filename))) {
-            List<Point3D> vertices = new ArrayList<>();
-            List<Face> faces = new ArrayList<>();
+            List<Point3D> vertices = new java.util.ArrayList<>();
+            List<Face> faces = new java.util.ArrayList<>();
 
             String line;
-            boolean readingVertices = false;
-            boolean readingFaces = false;
 
             while ((line = reader.readLine()) != null) {
                 line = line.trim();
 
-                if (line.equals("VERTICES:")) {
-                    readingVertices = true;
-                    readingFaces = false;
-                    continue;
-                } else if (line.equals("FACES:")) {
-                    readingVertices = false;
-                    readingFaces = true;
-                    continue;
-                } else if (line.isEmpty()) {
+                // Пропускаем комментарии и пустые строки
+                if (line.isEmpty() || line.startsWith("#")) {
                     continue;
                 }
 
-                if (readingVertices) {
-                    String[] coords = line.split("\\s+");
-                    if (coords.length == 3) {
-                        double x = Double.parseDouble(coords[0]);
-                        double y = Double.parseDouble(coords[1]);
-                        double z = Double.parseDouble(coords[2]);
+                String[] parts = line.split("\\s+");
+                if (parts.length < 2) {
+                    continue;
+                }
+
+                String keyword = parts[0];
+
+                // Обрабатываем вершины
+                if ("v".equals(keyword) && parts.length >= 4) {
+                    try {
+                        double x = Double.parseDouble(parts[1]);
+                        double y = Double.parseDouble(parts[2]);
+                        double z = Double.parseDouble(parts[3]);
                         vertices.add(new Point3D(x, y, z));
+                    } catch (NumberFormatException e) {
+                        System.err.println("Ошибка чтения вершины: " + line);
                     }
-                } else if (readingFaces) {
-                    String[] indices = line.split("\\s+");
+                }
+                // Обрабатываем грани
+                else if ("f".equals(keyword) && parts.length >= 3) {
                     Face face = new Face();
-                    for (String indexStr : indices) {
-                        int index = Integer.parseInt(indexStr);
-                        if (index >= 0 && index < vertices.size()) {
-                            face.addVertex(vertices.get(index));
+                    for (int i = 1; i < parts.length; i++) {
+                        try {
+                            // OBJ формат может содержать: vertex/texture/normal
+                            // Нам нужен только vertex индекс (первое число)
+                            String vertexPart = parts[i].split("/")[0];
+                            int vertexIndex = Integer.parseInt(vertexPart) - 1; // OBJ индексы с 1, наши с 0
+
+                            if (vertexIndex >= 0 && vertexIndex < vertices.size()) {
+                                face.addVertex(vertices.get(vertexIndex));
+                            }
+                        } catch (NumberFormatException e) {
+                            System.err.println("Ошибка чтения грани: " + line);
                         }
                     }
                     if (!face.getVertices().isEmpty()) {

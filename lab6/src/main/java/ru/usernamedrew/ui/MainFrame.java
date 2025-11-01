@@ -60,46 +60,9 @@ public class MainFrame extends JFrame {
         return mainPanel;
     }
 
-    private JPanel createControlPanel() {
-        JPanel panel = new JPanel(new FlowLayout(FlowLayout.LEFT));
-        panel.setPreferredSize(new Dimension(1000, 60));
-
-        JComboBox<String> shapeCombo = new JComboBox<>(new String[]{
-                "Цилиндр", "Конус", "Сфера", "Пользовательская"
-        });
-
-        JComboBox<String> axisCombo = new JComboBox<>(new String[]{
-                "Ось X", "Ось Y", "Ось Z"
-        });
-
-        JTextField divisionsField = new JTextField("24", 5);
-
-        JButton buildRevolutionBtn = new JButton("Построить фигуру вращения");
-        buildRevolutionBtn.addActionListener(e -> handleRevolutionCreation(
-                shapeCombo, axisCombo, divisionsField));
-
-        JButton saveBtn = new JButton("Сохранить модель");
-        saveBtn.addActionListener(e -> handleSaveModel());
-
-        JButton loadBtn = new JButton("Загрузить модель");
-        loadBtn.addActionListener(e -> handleLoadModel());
-
-        panel.add(new JLabel("Фигура вращения:"));
-        panel.add(shapeCombo);
-        panel.add(new JLabel("Ось:"));
-        panel.add(axisCombo);
-        panel.add(new JLabel("Разбиения:"));
-        panel.add(divisionsField);
-        panel.add(buildRevolutionBtn);
-        panel.add(saveBtn);
-        panel.add(loadBtn);
-
-        return panel;
-    }
-
     private JPanel createBasicControlPanel() {
         JPanel panel = new JPanel(new FlowLayout(FlowLayout.LEFT));
-        panel.setPreferredSize(new Dimension(1000, 60));
+        panel.setPreferredSize(new Dimension(1000, 100));
 
         // Выбор многогранника
         JComboBox<String> polyhedronCombo = new JComboBox<>(new String[]{
@@ -151,6 +114,8 @@ public class MainFrame extends JFrame {
         JButton arbitraryRotateBtn = new JButton("Вращение по произвольной оси");
         arbitraryRotateBtn.addActionListener(this::handleArbitraryRotation);
 
+        JPanel surfacePanel = createSurfaceControlPanel();
+
         // Добавляем компоненты
         panel.add(new JLabel("Многогранник:"));
         panel.add(polyhedronCombo);
@@ -163,6 +128,7 @@ public class MainFrame extends JFrame {
         panel.add(ownAxisRotateBtn);
         panel.add(reflectBtn);
         panel.add(arbitraryRotateBtn);
+        panel.add(surfacePanel);
 
         return panel;
     }
