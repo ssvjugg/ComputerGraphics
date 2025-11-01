@@ -10,7 +10,6 @@ import java.awt.event.ActionEvent;
 public class MainFrame extends JFrame {
     private GraphicsPanel graphicsPanel;
     private Polyhedron currentPolyhedron;
-    private Point3D fixedRotationCenter;
 
     public MainFrame() {
         initializeUI();
@@ -48,12 +47,6 @@ public class MainFrame extends JFrame {
                 case "Гексаэдр" -> currentPolyhedron = RegularPolyhedra.createHexahedron();
                 case "Октаэдр" -> currentPolyhedron = RegularPolyhedra.createOctahedron();
             }
-            if (currentPolyhedron != null) {
-                // Вычисляем центр исходной модели и сохраняем его
-                fixedRotationCenter = AffineTransform.getCenter(currentPolyhedron.getVertices());
-            } else {
-                fixedRotationCenter = null;
-            }
 
             graphicsPanel.setPolyhedron(currentPolyhedron);
         });
@@ -75,11 +68,17 @@ public class MainFrame extends JFrame {
         JButton translateBtn = new JButton("Смещение");
         translateBtn.addActionListener(this::handleTranslation);
 
-        JButton scaleBtn = new JButton("Масштабирование");
-        scaleBtn.addActionListener(this::handleScaling);
+        JButton scaleBtn = new JButton("Масштабирование(центр)");
+        scaleBtn.addActionListener(this::handleScalingCenter);
+
+        JButton scaleOriginBtn = new JButton("Масштабирование(начало)");
+        scaleOriginBtn.addActionListener(this::handleScalingOrigin);
 
         JButton rotateBtn = new JButton("Вращение");
         rotateBtn.addActionListener(this::handleRotation);
+
+        JButton ownAxisRotateBtn = new JButton("Вращение вокруг своей оси");
+        ownAxisRotateBtn.addActionListener(this::handleRotationAroundOwnAxis);
 
         JButton reflectBtn = new JButton("Отражение");
         reflectBtn.addActionListener(this::handleReflection);
@@ -94,7 +93,9 @@ public class MainFrame extends JFrame {
         panel.add(projectionCombo);
         panel.add(translateBtn);
         panel.add(scaleBtn);
+        panel.add(scaleOriginBtn);
         panel.add(rotateBtn);
+        panel.add(ownAxisRotateBtn);
         panel.add(reflectBtn);
 
         panel.add(arbitraryRotateBtn);
@@ -125,7 +126,43 @@ public class MainFrame extends JFrame {
         }
     }
 
-    private void handleScaling(ActionEvent e) {
+    private void scaleAroundPoint(Point3D point, double scale) {
+        if (currentPolyhedron == null) return;
+
+        try {
+            double[][] T_neg = AffineTransform.createTranslationMatrix(-point.x(), -point.y(), -point.z());
+            double[][] S = AffineTransform.createScalingMatrix(scale, scale, scale);
+            double[][] T_pos = AffineTransform.createTranslationMatrix(point.x(), point.y(), point.z());
+
+            double[][] M1 = AffineTransform.multiplyMatrices(S, T_neg);
+            double[][] transform = AffineTransform.multiplyMatrices(T_pos, M1);
+
+            currentPolyhedron = currentPolyhedron.transform(transform);
+            graphicsPanel.setPolyhedron(currentPolyhedron);
+        } catch (NumberFormatException ex) {
+            JOptionPane.showMessageDialog(this, "Неверный ввод!");
+        }
+    }
+
+    private void handleScalingOrigin(ActionEvent e) {
+        if (currentPolyhedron == null) return;
+
+        String scaleStr = JOptionPane.showInputDialog("Введите коэффициент масштабирования:");
+
+        try {
+            if (scaleStr == null || scaleStr.isEmpty()) {
+                return;
+            }
+            double scale = Double.parseDouble(scaleStr);
+            Point3D origin = new Point3D(0, 0, 0);
+
+            scaleAroundPoint(origin, scale);
+        } catch (NumberFormatException ex) {
+            JOptionPane.showMessageDialog(this, "Неверный ввод!");
+        }
+    }
+
+    private void handleScalingCenter(ActionEvent e) {
         if (currentPolyhedron == null) return;
 
         String scaleStr = JOptionPane.showInputDialog("Введите коэффициент масштабирования:");
@@ -136,15 +173,20 @@ public class MainFrame extends JFrame {
             }
             double scale = Double.parseDouble(scaleStr);
 
-            // Масштабирование относительно центра
-            Point3D center = AffineTransform.getCenter(currentPolyhedron.getVertices());
-            double[][] transform = AffineTransform.multiplyMatrices(
-                    AffineTransform.createTranslationMatrix(-fixedRotationCenter.x(), -fixedRotationCenter.y(), -fixedRotationCenter.z()),
-                    AffineTransform.multiplyMatrices(
-                            AffineTransform.createScalingMatrix(scale, scale, scale),
-                            AffineTransform.createTranslationMatrix(fixedRotationCenter.x(), fixedRotationCenter.y(), fixedRotationCenter.z())
-                    )
-            );
+            scaleAroundPoint(AffineTransform.getCenter(currentPolyhedron.getVertices()), scale);
+        } catch (NumberFormatException ex) {
+            JOptionPane.showMessageDialog(this, "Неверный ввод!");
+        }
+    }
+
+    private void rotateAroundPoint(double[][] rotationMatrix, Point3D point) {
+        try {
+
+            double[][] T_neg = AffineTransform.createTranslationMatrix(-point.x(), -point.y(), -point.z());
+            double[][] T_pos = AffineTransform.createTranslationMatrix(point.x(), point.y(), point.z());
+
+            double[][] M1 = AffineTransform.multiplyMatrices(rotationMatrix, T_neg);
+            double[][] transform = AffineTransform.multiplyMatrices(T_pos, M1);
 
             currentPolyhedron = currentPolyhedron.transform(transform);
             graphicsPanel.setPolyhedron(currentPolyhedron);
@@ -175,17 +217,39 @@ public class MainFrame extends JFrame {
                 case "Ось Z" -> rotationMatrix = AffineTransform.createRotationZMatrix(angle);
                 default -> rotationMatrix = AffineTransform.createIdentityMatrix();
             }
+            Point3D point = new Point3D(0, 0, 0);
 
-            double[][] transform = AffineTransform.multiplyMatrices(
-                    AffineTransform.createTranslationMatrix(-fixedRotationCenter.x(), -fixedRotationCenter.y(), -fixedRotationCenter.z()),
-                    AffineTransform.multiplyMatrices(
-                            rotationMatrix,
-                            AffineTransform.createTranslationMatrix(fixedRotationCenter.x(), fixedRotationCenter.y(), fixedRotationCenter.z())
-                    )
-            );
+            rotateAroundPoint(rotationMatrix, point);
+        } catch (NumberFormatException ex) {
+            JOptionPane.showMessageDialog(this, "Неверный ввод!");
+        }
+    }
 
-            currentPolyhedron = currentPolyhedron.transform(transform);
-            graphicsPanel.setPolyhedron(currentPolyhedron);
+    private void handleRotationAroundOwnAxis(ActionEvent e) {
+        if (currentPolyhedron == null) return;
+
+        String[] options = {"Ось X", "Ось Y", "Ось Z"};
+        String axis = (String) JOptionPane.showInputDialog(this, "Выберите ось вращения:",
+                "Вращение", JOptionPane.QUESTION_MESSAGE, null, options, options[0]);
+
+        String angleStr = JOptionPane.showInputDialog("Введите угол в градусах:");
+
+        try {
+            if (angleStr == null || angleStr.isEmpty()) {
+                return;
+            }
+            double angle = Math.toRadians(Double.parseDouble(angleStr));
+            double[][] rotationMatrix;
+
+            switch (axis) {
+                case "Ось X" -> rotationMatrix = AffineTransform.createRotationXMatrix(angle);
+                case "Ось Y" -> rotationMatrix = AffineTransform.createRotationYMatrix(angle);
+                case "Ось Z" -> rotationMatrix = AffineTransform.createRotationZMatrix(angle);
+                default -> rotationMatrix = AffineTransform.createIdentityMatrix();
+            }
+            Point3D center = AffineTransform.getCenter(currentPolyhedron.getVertices());
+
+            rotateAroundPoint(rotationMatrix, center);
         } catch (NumberFormatException ex) {
             JOptionPane.showMessageDialog(this, "Неверный ввод!");
         }
