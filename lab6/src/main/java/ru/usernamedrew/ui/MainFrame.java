@@ -6,6 +6,7 @@ import ru.usernamedrew.util.AffineTransform;
 import javax.swing.*;
 import java.awt.*;
 import java.awt.event.ActionEvent;
+import java.util.function.BiFunction;
 
 public class MainFrame extends JFrame {
     private GraphicsPanel graphicsPanel;
@@ -34,6 +35,7 @@ public class MainFrame extends JFrame {
 
     private JPanel createControlPanel() {
         JPanel panel = new JPanel(new FlowLayout());
+        panel.setPreferredSize(new Dimension(1000, 100));
 
         // Выбор многогранника
         JComboBox<String> polyhedronCombo = new JComboBox<>(new String[]{
@@ -86,6 +88,8 @@ public class MainFrame extends JFrame {
         JButton arbitraryRotateBtn = new JButton("Вращение по произвольной оси");
         arbitraryRotateBtn.addActionListener(this::handleArbitraryRotation);
 
+        JPanel surfacePanel = createSurfaceControlPanel();
+
         // Добавляем компоненты
         panel.add(new JLabel("Многогранник:"));
         panel.add(polyhedronCombo);
@@ -99,6 +103,8 @@ public class MainFrame extends JFrame {
         panel.add(reflectBtn);
 
         panel.add(arbitraryRotateBtn);
+
+        panel.add(surfacePanel);
 
         return panel;
     }
@@ -304,6 +310,68 @@ public class MainFrame extends JFrame {
 
         } catch (NumberFormatException ex) {
             JOptionPane.showMessageDialog(this, "Ошибка.");
+        }
+    }
+
+    private JPanel createSurfaceControlPanel() {
+        JPanel panel = new JPanel(new FlowLayout(FlowLayout.LEFT));
+
+        JComboBox<String> functionCombo = new JComboBox<>(new String[]{
+                "Параболоид (x^2 + y^2)", "Синусоида (sin(x) * cos(y))"
+        });
+
+        JButton buildSurfaceBtn = new JButton("Построить Поверхность");
+        buildSurfaceBtn.addActionListener(e -> handleSurfaceCreation(functionCombo));
+
+        panel.add(new JLabel("Поверхность:"));
+        panel.add(functionCombo);
+        panel.add(buildSurfaceBtn);
+
+        return panel;
+    }
+
+    private void handleSurfaceCreation(JComboBox<String> functionCombo) {
+        String selectedFunction = (String) functionCombo.getSelectedItem();
+        BiFunction<Double, Double, Double> function;
+
+        if (selectedFunction == null) return;
+
+        if (selectedFunction.contains("Параболоид")) {
+            function = SurfaceFactory::paraboloid;
+        } else if (selectedFunction.contains("Синусоида")) {
+            function = SurfaceFactory::sinCosSurface;
+        } else {
+            JOptionPane.showMessageDialog(this, "Неизвестная функция.");
+            return;
+        }
+
+        String x0Str = JOptionPane.showInputDialog("Введите X0:");
+        String x1Str = JOptionPane.showInputDialog("Введите X1:");
+        String y0Str = JOptionPane.showInputDialog("Введите Y0:");
+        String y1Str = JOptionPane.showInputDialog("Введите Y1:");
+        String nStr = JOptionPane.showInputDialog("Введите количество разбиений (Nx, Ny):");
+
+        try {
+            if (x0Str == null || x1Str == null || y0Str == null || y1Str == null || nStr == null) {
+                return;
+            }
+
+            double x0 = Double.parseDouble(x0Str);
+            double x1 = Double.parseDouble(x1Str);
+            double y0 = Double.parseDouble(y0Str);
+            double y1 = Double.parseDouble(y1Str);
+            int n = Integer.parseInt(nStr);
+
+            if (n <= 0) {
+                JOptionPane.showMessageDialog(this, "Колво разбиений должно быть > 0");
+                return;
+            }
+
+            currentPolyhedron = SurfaceFactory.createSurface(function, x0, x1, y0, y1, n, n);
+            graphicsPanel.setPolyhedron(currentPolyhedron);
+
+        } catch (NumberFormatException ex) {
+            JOptionPane.showMessageDialog(this, "Ошибка");
         }
     }
 
