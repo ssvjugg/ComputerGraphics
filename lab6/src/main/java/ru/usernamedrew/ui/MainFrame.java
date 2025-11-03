@@ -2,10 +2,14 @@ package ru.usernamedrew.ui;
 
 import ru.usernamedrew.model.*;
 import ru.usernamedrew.util.AffineTransform;
+import ru.usernamedrew.util.PolyhedronIO;
 
 import javax.swing.*;
 import java.awt.*;
 import java.awt.event.ActionEvent;
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.Objects;
 import java.util.function.BiFunction;
 
 public class MainFrame extends JFrame {
@@ -23,18 +27,41 @@ public class MainFrame extends JFrame {
 
         // Создаем панель для отрисовки
         graphicsPanel = new GraphicsPanel();
-        add(graphicsPanel, BorderLayout.CENTER);
 
-        // Создаем панель управления
-        JPanel controlPanel = createControlPanel();
-        add(controlPanel, BorderLayout.NORTH);
+        // Создаем основную панель управления с прокруткой
+        JPanel mainControlPanel = createMainControlPanel();
+        JScrollPane scrollPane = new JScrollPane(mainControlPanel);
+        scrollPane.setPreferredSize(new Dimension(1000, 150)); // Увеличиваем высоту
+        scrollPane.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_AS_NEEDED);
+        scrollPane.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_NEVER);
+
+        // Добавляем компоненты
+        add(scrollPane, BorderLayout.NORTH);
+        add(graphicsPanel, BorderLayout.CENTER);
 
         pack();
         setLocationRelativeTo(null);
+        setExtendedState(JFrame.MAXIMIZED_BOTH); // Разворачиваем на весь экран
     }
 
-    private JPanel createControlPanel() {
-        JPanel panel = new JPanel(new FlowLayout());
+    private JPanel createMainControlPanel() {
+        JPanel mainPanel = new JPanel();
+        mainPanel.setLayout(new BoxLayout(mainPanel, BoxLayout.Y_AXIS));
+
+        // Первая строка - фигуры вращения
+        JPanel revolutionPanel = createRevolutionControlPanel();
+
+        // Вторая строка - основные управления
+        JPanel basicControlPanel = createBasicControlPanel();
+
+        mainPanel.add(revolutionPanel);
+        mainPanel.add(basicControlPanel);
+
+        return mainPanel;
+    }
+
+    private JPanel createBasicControlPanel() {
+        JPanel panel = new JPanel(new FlowLayout(FlowLayout.LEFT));
         panel.setPreferredSize(new Dimension(1000, 100));
 
         // Выбор многогранника
@@ -49,7 +76,6 @@ public class MainFrame extends JFrame {
                 case "Гексаэдр" -> currentPolyhedron = RegularPolyhedra.createHexahedron();
                 case "Октаэдр" -> currentPolyhedron = RegularPolyhedra.createOctahedron();
             }
-
             graphicsPanel.setPolyhedron(currentPolyhedron);
         });
 
@@ -101,9 +127,7 @@ public class MainFrame extends JFrame {
         panel.add(rotateBtn);
         panel.add(ownAxisRotateBtn);
         panel.add(reflectBtn);
-
         panel.add(arbitraryRotateBtn);
-
         panel.add(surfacePanel);
 
         return panel;
@@ -383,5 +407,157 @@ public class MainFrame extends JFrame {
         }
 
         return new Point3D(V.x() / length, V.y() / length, V.z() / length);
+    }
+
+    // Добавляем в MainFrame.java новые методы и компоненты
+
+    private JPanel createRevolutionControlPanel() {
+        JPanel panel = new JPanel(new FlowLayout(FlowLayout.LEFT));
+
+        JComboBox<String> shapeCombo = new JComboBox<>(new String[]{
+                "Цилиндр", "Конус", "Сфера", "Пользовательская"
+        });
+
+        JComboBox<String> axisCombo = new JComboBox<>(new String[]{
+                "Ось X", "Ось Y", "Ось Z"
+        });
+
+        JTextField divisionsField = new JTextField("24", 5);
+
+        JButton buildRevolutionBtn = new JButton("Построить фигуру вращения");
+        buildRevolutionBtn.addActionListener(e -> handleRevolutionCreation(
+                shapeCombo, axisCombo, divisionsField));
+
+        JButton saveBtn = new JButton("Сохранить модель");
+        saveBtn.addActionListener(e -> handleSaveModel());
+
+        JButton loadBtn = new JButton("Загрузить модель");
+        loadBtn.addActionListener(e -> handleLoadModel());
+
+        panel.add(new JLabel("Фигура вращения:"));
+        panel.add(shapeCombo);
+        panel.add(new JLabel("Ось:"));
+        panel.add(axisCombo);
+        panel.add(new JLabel("Разбиения:"));
+        panel.add(divisionsField);
+        panel.add(buildRevolutionBtn);
+        panel.add(saveBtn);
+        panel.add(loadBtn);
+
+        return panel;
+    }
+
+    private void handleRevolutionCreation(JComboBox<String> shapeCombo, JComboBox<String> axisCombo, JTextField divisionsField) {
+        try {
+            String shapeType = (String) shapeCombo.getSelectedItem();
+            String axisStr = (String) axisCombo.getSelectedItem();
+            int divisions = Integer.parseInt(divisionsField.getText());
+
+            if (divisions < 3) {
+                JOptionPane.showMessageDialog(this, "Количество разбиений должно быть не менее 3");
+                return;
+            }
+
+            RevolutionSurfaceFactory.Axis axis = switch (axisStr) {
+                case "Ось X" -> RevolutionSurfaceFactory.Axis.X;
+                case "Ось Y" -> RevolutionSurfaceFactory.Axis.Y;
+                case "Ось Z" -> RevolutionSurfaceFactory.Axis.Z;
+                default -> RevolutionSurfaceFactory.Axis.Y;
+            };
+
+            java.util.List<Point3D> generatrix;
+
+            switch (shapeType) {
+                case "Цилиндр" -> generatrix = RevolutionSurfaceFactory.createCylinderGeneratrix(1.0, 2.0, 10);
+                case "Конус" -> generatrix = RevolutionSurfaceFactory.createConeGeneratrix(1.0, 2.0, 10);
+                case "Сфера" -> generatrix = RevolutionSurfaceFactory.createSphereGeneratrix(1.0, 10);
+                case "Пользовательская" -> {
+                    generatrix = createCustomGeneratrix();
+                    if (generatrix == null) return;
+                }
+                default -> {
+                    JOptionPane.showMessageDialog(this, "Неизвестный тип фигуры");
+                    return;
+                }
+            }
+
+            currentPolyhedron = RevolutionSurfaceFactory.createRevolutionSurface(generatrix, axis, divisions);
+            graphicsPanel.setPolyhedron(currentPolyhedron);
+
+        } catch (NumberFormatException ex) {
+            JOptionPane.showMessageDialog(this, "Неверный формат числа");
+        } catch (Exception ex) {
+            JOptionPane.showMessageDialog(this, "Ошибка при создании фигуры: " + ex.getMessage());
+        }
+    }
+
+    private java.util.List<Point3D> createCustomGeneratrix() {
+        String input = JOptionPane.showInputDialog(this,
+                "Введите точки образующей в формате:\n" +
+                        "x1,y1,z1;x2,y2,z2;...\n" +
+                        "Пример: 0,0,0;1,0,0;1,1,0");
+
+        if (input == null || input.trim().isEmpty()) {
+            return null;
+        }
+
+        java.util.List<Point3D> generatrix = new java.util.ArrayList<>();
+        String[] points = input.split(";");
+
+        for (String pointStr : points) {
+            String[] coords = pointStr.split(",");
+            if (coords.length == 3) {
+                try {
+                    double x = Double.parseDouble(coords[0].trim());
+                    double y = Double.parseDouble(coords[1].trim());
+                    double z = Double.parseDouble(coords[2].trim());
+                    generatrix.add(new Point3D(x, y, z));
+                } catch (NumberFormatException e) {
+                    JOptionPane.showMessageDialog(this, "Неверный формат координат: " + pointStr);
+                    return null;
+                }
+            }
+        }
+
+        if (generatrix.size() < 2) {
+            JOptionPane.showMessageDialog(this, "Образующая должна содержать хотя бы 2 точки");
+            return null;
+        }
+
+        return generatrix;
+    }
+
+    private void handleSaveModel() {
+        if (currentPolyhedron == null) {
+            JOptionPane.showMessageDialog(this, "Нет модели для сохранения");
+            return;
+        }
+
+        JFileChooser fileChooser = new JFileChooser();
+        fileChooser.setDialogTitle("Сохранить модель");
+
+        if (fileChooser.showSaveDialog(this) == JFileChooser.APPROVE_OPTION) {
+            try {
+                PolyhedronIO.saveToFile(currentPolyhedron, fileChooser.getSelectedFile().getAbsolutePath());
+                JOptionPane.showMessageDialog(this, "Модель успешно сохранена");
+            } catch (IOException ex) {
+                JOptionPane.showMessageDialog(this, "Ошибка при сохранении: " + ex.getMessage());
+            }
+        }
+    }
+
+    private void handleLoadModel() {
+        JFileChooser fileChooser = new JFileChooser();
+        fileChooser.setDialogTitle("Загрузить модель");
+
+        if (fileChooser.showOpenDialog(this) == JFileChooser.APPROVE_OPTION) {
+            try {
+                currentPolyhedron = PolyhedronIO.loadFromFile(fileChooser.getSelectedFile().getAbsolutePath());
+                graphicsPanel.setPolyhedron(currentPolyhedron);
+                JOptionPane.showMessageDialog(this, "Модель успешно загружена");
+            } catch (IOException ex) {
+                JOptionPane.showMessageDialog(this, "Ошибка при загрузке: " + ex.getMessage());
+            }
+        }
     }
 }
