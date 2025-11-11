@@ -11,3 +11,4 @@
 - [Лабораторная работа №4. Аффинные преобразования на плоскости и вспомогательные алгоритмы](https://github.com/ssvjugg/ComputerGraphics/tree/main/lab4)
 - [Лабораторная работа №5. L-системы. Алгоритм midpoint displacement. Кривые Безье](https://github.com/ssvjugg/ComputerGraphics/tree/main/lab5)
 - [Лабораторная работа №6. Аффинные преобразования в пространстве. Проецирование](https://github.com/ssvjugg/ComputerGraphics/tree/main/lab6)
+- [Лабораторная работа №7. Построение трёхмерных моделей](https://github.com/ssvjugg/ComputerGraphics/tree/main/lab6/lab7)
