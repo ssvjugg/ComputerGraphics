@@ -14,6 +14,8 @@ public class GraphicsPanel extends JPanel {
     private String projectionType = "axonometric";
     private double scale = 50;
     private int centerX, centerY;
+    private boolean backfaceCulling = true; // Флаг отсечения нелицевых граней
+    private Point3D viewVector = new Point3D(0, 0, -1); // Вектор обзора по умолчанию
 
     public GraphicsPanel() {
         setBackground(Color.WHITE);
@@ -32,6 +34,16 @@ public class GraphicsPanel extends JPanel {
 
     public void setScale(double scale) {
         this.scale = scale;
+        repaint();
+    }
+
+    public void setBackfaceCulling(boolean enabled) {
+        this.backfaceCulling = enabled;
+        repaint();
+    }
+
+    public void setViewVector(Point3D viewVector) {
+        this.viewVector = viewVector.normalize();
         repaint();
     }
 
@@ -54,14 +66,11 @@ public class GraphicsPanel extends JPanel {
         drawPolyhedron(g2d);
     }
 
-
     //отрисовка координатных осей
     private void drawCoordinateAxes(Graphics2D g2d) {
-        //делаем все теже матричные преобразования как и для многогранника
         double axisLength = 3.0;
 
         Point3D origin3D = new Point3D(0, 0, 0);
-
         Point3D xAxisEnd3D = new Point3D(axisLength, 0, 0);
         Point3D yAxisEnd3D = new Point3D(0, axisLength, 0);
         Point3D zAxisEnd3D = new Point3D(0, 0, axisLength);
@@ -84,36 +93,116 @@ public class GraphicsPanel extends JPanel {
         g2d.drawLine(ox, oy, (int) zAxisEnd2D.getX(), (int) zAxisEnd2D.getY());
 
         g2d.setColor(Color.BLACK);
-
         g2d.drawString("X", (int) xAxisEnd2D.getX() + 5, (int) xAxisEnd2D.getY());
-
         g2d.drawString("Y", (int) yAxisEnd2D.getX() - 5, (int) yAxisEnd2D.getY() - 5);
-
         g2d.drawString("Z", (int) zAxisEnd2D.getX() + 5, (int) zAxisEnd2D.getY() + 5);
     }
 
     private void drawPolyhedron(Graphics2D g2d) {
         if (polyhedron == null) return;
 
-        g2d.setColor(Color.BLACK);
         g2d.setStroke(new BasicStroke(2));
+
+        int visibleFaces = 0;
+        int totalFaces = polyhedron.getFaces().size();
 
         for (Face face : polyhedron.getFaces()) {
             List<Point3D> vertices = face.getVertices();
             if (vertices.size() < 2) continue;
+
+            // Проверка видимости грани
+            boolean isVisible = !backfaceCulling || isFaceVisible(face);
+            if (isVisible) {
+                visibleFaces++;
+            } else {
+                continue; // Пропускаем нелицевые грани
+            }
 
             Point2D[] points = new Point2D[vertices.size()];
             for (int i = 0; i < vertices.size(); i++) {
                 points[i] = projectPoint(vertices.get(i));
             }
 
-            // Рисуем грани как полигоны
+            // Рисуем видимые грани
+            g2d.setColor(Color.BLACK);
             for (int i = 0; i < points.length; i++) {
                 Point2D start = points[i];
                 Point2D end = points[(i + 1) % points.length];
                 g2d.draw(new Line2D.Double(start.getX(), start.getY(), end.getX(), end.getY()));
             }
         }
+
+        // Отладочная информация
+        if (backfaceCulling) {
+            g2d.setColor(Color.RED);
+            g2d.drawString(String.format("Грани: %d/%d видимых", visibleFaces, totalFaces), 10, 20);
+            g2d.drawString(String.format("Вектор обзора: (%.2f, %.2f, %.2f)",
+                    viewVector.x(), viewVector.y(), viewVector.z()), 10, 40);
+        }
+    }
+
+    // Проверка видимости грани
+    private boolean isFaceVisible(Face face) {
+        if (face.getVertices().size() < 3) return true;
+
+        Point3D normal = face.getNormal();
+
+        // Для перспективной проекции используем вектор от камеры к грани
+        if ("perspective".equals(projectionType)) {
+            // Находим центр грани
+            double centerX = 0, centerY = 0, centerZ = 0;
+            for (Point3D vertex : face.getVertices()) {
+                centerX += vertex.x();
+                centerY += vertex.y();
+                centerZ += vertex.z();
+            }
+            int count = face.getVertices().size();
+            Point3D faceCenter = new Point3D(centerX / count, centerY / count, centerZ / count);
+
+            // Вектор от камеры к центру грани (камера в начале координат смотрит вдоль Z)
+            Point3D viewToFace = faceCenter.subtract(new Point3D(0, 0, 0));
+            viewToFace = viewToFace.normalize();
+
+            // Скалярное произведение
+            double dotProduct = normal.x() * viewToFace.x() +
+                    normal.y() * viewToFace.y() +
+                    normal.z() * viewToFace.z();
+
+            return dotProduct < 0; // Для перспективы условие обратное
+        } else {
+            // Для аксонометрии используем заданный вектор обзора
+            double dotProduct = normal.x() * viewVector.x() +
+                    normal.y() * viewVector.y() +
+                    normal.z() * viewVector.z();
+
+            return dotProduct > 0;
+        }
+    }
+
+    // Отрисовка нормалей граней для отладки
+    private void drawFaceNormal(Graphics2D g2d, Face face) {
+        // Находим центр грани
+        double centerX = 0, centerY = 0, centerZ = 0;
+        for (Point3D vertex : face.getVertices()) {
+            centerX += vertex.x();
+            centerY += vertex.y();
+            centerZ += vertex.z();
+        }
+        int count = face.getVertices().size();
+        Point3D faceCenter = new Point3D(centerX / count, centerY / count, centerZ / count);
+
+        // Конец нормали
+        Point3D normalEnd = faceCenter.add(face.getNormal().multiply(0.5));
+
+        // Проецируем точки
+        Point2D center2D = projectPoint(faceCenter);
+        Point2D normalEnd2D = projectPoint(normalEnd);
+
+        // Рисуем нормаль
+        g2d.setColor(Color.RED);
+        g2d.setStroke(new BasicStroke(1));
+        g2d.drawLine((int) center2D.getX(), (int) center2D.getY(),
+                (int) normalEnd2D.getX(), (int) normalEnd2D.getY());
     }
 
     private Point2D projectPoint(Point3D point3d) {
@@ -122,12 +211,10 @@ public class GraphicsPanel extends JPanel {
         double[][] projectionMatrix;
 
         if ("perspective".equals(projectionType)) {
-            // Перспективная проекция
             double distance = 500;
             projectionMatrix = AffineTransform.createPerspectiveProjectionMatrix(distance);
         } else {
             double angle = Math.PI / 6;
-
             projectionMatrix = AffineTransform.createAxonometricProjectionMatrix(angle);
         }
 

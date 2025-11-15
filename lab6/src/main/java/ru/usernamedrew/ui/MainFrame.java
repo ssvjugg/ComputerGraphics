@@ -130,7 +130,144 @@ public class MainFrame extends JFrame {
         panel.add(arbitraryRotateBtn);
         panel.add(surfacePanel);
 
+        // Кнопка для изменения вектора обзора
+        JButton viewVectorBtn = new JButton("Изменить вектор обзора");
+        viewVectorBtn.addActionListener(this::handleViewVectorChange);
+
+        // Чекбокс для включения/отключения отсечения граней
+        JCheckBox backfaceCullingCheckbox = new JCheckBox("Отсечение нелицевых граней", true);
+        backfaceCullingCheckbox.addActionListener(e -> {
+            graphicsPanel.setBackfaceCulling(backfaceCullingCheckbox.isSelected());
+        });
+
+        // Кнопка для автоматического вращения
+        JButton autoRotateBtn = new JButton("Автовращение");
+        autoRotateBtn.addActionListener(this::handleAutoRotation);
+
+        // Добавляем новые компоненты
+        panel.add(viewVectorBtn);
+        panel.add(backfaceCullingCheckbox);
+        panel.add(autoRotateBtn);
+
         return panel;
+    }
+
+    // Обработчик изменения вектора обзора
+// Обработчик изменения вектора обзора - УЛУЧШЕННАЯ ВЕРСИЯ
+    private void handleViewVectorChange(ActionEvent e) {
+        // Предлагаем предустановленные варианты или ручной ввод
+        String[] options = {
+                "Стандартный (0,0,-1)",
+                "Сверху (0,1,0)",
+                "Снизу (0,-1,0)",
+                "Слева (-1,0,0)",
+                "Справа (1,0,0)",
+                "Сзади (0,0,1)",
+                "Ручной ввод"
+        };
+
+        String choice = (String) JOptionPane.showInputDialog(this,
+                "Выберите направление обзора:",
+                "Вектор обзора",
+                JOptionPane.QUESTION_MESSAGE,
+                null,
+                options,
+                options[0]);
+
+        if (choice == null) return;
+
+        Point3D newViewVector;
+
+        switch (choice) {
+            case "Стандартный (0,0,-1)":
+                newViewVector = new Point3D(0, 0, -1);
+                break;
+            case "Сверху (0,1,0)":
+                newViewVector = new Point3D(0, 1, 0);
+                break;
+            case "Снизу (0,-1,0)":
+                newViewVector = new Point3D(0, -1, 0);
+                break;
+            case "Слева (-1,0,0)":
+                newViewVector = new Point3D(-1, 0, 0);
+                break;
+            case "Справа (1,0,0)":
+                newViewVector = new Point3D(1, 0, 0);
+                break;
+            case "Сзади (0,0,1)":
+                newViewVector = new Point3D(0, 0, 1);
+                break;
+            case "Ручной ввод":
+                newViewVector = handleManualViewVectorInput();
+                if (newViewVector == null) return;
+                break;
+            default:
+                return;
+        }
+
+        graphicsPanel.setViewVector(newViewVector);
+
+        // Показываем информацию о текущем векторе
+        JOptionPane.showMessageDialog(this,
+                "Вектор обзора установлен:\n" +
+                        String.format("X: %.2f, Y: %.2f, Z: %.2f",
+                                newViewVector.x(), newViewVector.y(), newViewVector.z()) +
+                        "\n\nДля лучшего эффекта:\n" +
+                        "1. Используйте сложные фигуры (сфера, тор)\n" +
+                        "2. Включите отсечение нелицевых граней\n" +
+                        "3. Используйте аксонометрическую проекцию");
+    }
+
+    private Point3D handleManualViewVectorInput() {
+        String xStr = JOptionPane.showInputDialog("Введите X компонент вектора обзора:\n(например: 1, 0, -1)");
+        String yStr = JOptionPane.showInputDialog("Введите Y компонент вектора обзора:");
+        String zStr = JOptionPane.showInputDialog("Введите Z компонент вектора обзора:");
+
+        try {
+            if (xStr == null || yStr == null || zStr == null) return null;
+
+            double x = Double.parseDouble(xStr);
+            double y = Double.parseDouble(yStr);
+            double z = Double.parseDouble(zStr);
+
+            // Нормализуем вектор
+            double length = Math.sqrt(x*x + y*y + z*z);
+            if (length < 1e-9) {
+                JOptionPane.showMessageDialog(this, "Вектор не может быть нулевым! Используется (0,0,-1)");
+                return new Point3D(0, 0, -1);
+            }
+
+            return new Point3D(x/length, y/length, z/length);
+        } catch (NumberFormatException ex) {
+            JOptionPane.showMessageDialog(this, "Неверный формат числа! Используется стандартный вектор (0,0,-1)");
+            return new Point3D(0, 0, -1);
+        }
+    }
+
+    // Обработчик автоматического вращения
+    private void handleAutoRotation(ActionEvent e) {
+        if (currentPolyhedron == null) return;
+
+        Thread rotationThread = new Thread(() -> {
+            try {
+                for (int i = 0; i < 360; i += 5) {
+                    double angle = Math.toRadians(i);
+                    double[][] rotationMatrix = AffineTransform.createRotationYMatrix(angle);
+                    currentPolyhedron = currentPolyhedron.transform(rotationMatrix);
+
+                    SwingUtilities.invokeLater(() -> {
+                        graphicsPanel.setPolyhedron(currentPolyhedron);
+                    });
+
+                    Thread.sleep(50);
+                }
+            } catch (InterruptedException ex) {
+                Thread.currentThread().interrupt();
+            }
+        });
+
+        rotationThread.setDaemon(true);
+        rotationThread.start();
     }
 
     private void handleTranslation(ActionEvent e) {
@@ -412,6 +549,11 @@ public class MainFrame extends JFrame {
     // Добавляем в MainFrame.java новые методы и компоненты
 
     private JPanel createRevolutionControlPanel() {
+        // Создает UI элементы:
+        // - Выбор типа фигуры (Цилиндр/Конус/Сфера/Пользовательская)
+        // - Выбор оси вращения (X/Y/Z)
+        // - Поле для ввода количества разбиений
+        // - Кнопки: "Построить фигуру вращения", "Сохранить модель", "Загрузить модель"
         JPanel panel = new JPanel(new FlowLayout(FlowLayout.LEFT));
 
         JComboBox<String> shapeCombo = new JComboBox<>(new String[]{
@@ -448,7 +590,13 @@ public class MainFrame extends JFrame {
     }
 
     private void handleRevolutionCreation(JComboBox<String> shapeCombo, JComboBox<String> axisCombo, JTextField divisionsField) {
-        try {
+        // 1. Получает выбранные параметры из UI
+        // 2. Проверяет корректность ввода (разбиения ≥ 3)
+        // 3. Определяет ось вращения (X/Y/Z)
+        // 4. Создает образующую в зависимости от типа фигуры
+        // 5. Вызывает RevolutionSurfaceFactory для построения фигуры
+        // 6. Устанавливает полученную модель в graphicsPanel
+            try {
             String shapeType = (String) shapeCombo.getSelectedItem();
             String axisStr = (String) axisCombo.getSelectedItem();
             int divisions = Integer.parseInt(divisionsField.getText());
@@ -492,6 +640,10 @@ public class MainFrame extends JFrame {
     }
 
     private java.util.List<Point3D> createCustomGeneratrix() {
+        // 1. Запрашивает у пользователя точки в формате: "x1,y1,z1;x2,y2,z2;..."
+        // 2. Парсит строку в список Point3D
+        // 3. Проверяет, что минимум 2 точки
+        // 4. Возвращает список точек образующей
         String input = JOptionPane.showInputDialog(this,
                 "Введите точки образующей в формате:\n" +
                         "x1,y1,z1;x2,y2,z2;...\n" +
@@ -528,6 +680,10 @@ public class MainFrame extends JFrame {
     }
 
     private void handleSaveModel() {
+        // 1. Проверяет, что есть модель для сохранения
+        // 2. Открывает диалог выбора файла
+        // 3. Вызывает PolyhedronIO.saveToFile()
+        // 4. Показывает сообщение об успехе/ошибке
         if (currentPolyhedron == null) {
             JOptionPane.showMessageDialog(this, "Нет модели для сохранения");
             return;
@@ -547,6 +703,10 @@ public class MainFrame extends JFrame {
     }
 
     private void handleLoadModel() {
+        // 1. Открывает диалог выбора файла
+        // 2. Вызывает PolyhedronIO.loadFromFile()
+        // 3. Устанавливает загруженную модель в graphicsPanel
+        // 4. Показывает сообщение об успехе/ошибке
         JFileChooser fileChooser = new JFileChooser();
         fileChooser.setDialogTitle("Загрузить модель");
 

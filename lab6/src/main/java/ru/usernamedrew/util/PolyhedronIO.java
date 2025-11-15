@@ -10,6 +10,17 @@ import java.util.Locale;
 public class PolyhedronIO {
 
     public static void saveToFile(Polyhedron polyhedron, String filename) throws IOException {
+        // Формат OBJ:
+        // 1. Заголовок с комментариями (#)
+        // 2. Секция вершин (v x y z)
+        //    - Каждая вершина записывается как "v 1.000000 2.000000 3.000000"
+        //    - Координаты с точностью 6 знаков после запятой
+        // 3. Секция граней (f v1 v2 v3 ...)
+        //    - Каждая грань записывается как "f 1 2 3"
+        //    - Индексы вершин начинаются с 1 (стандарт OBJ)
+        //    - Автоматически добавляется расширение .obj
+
+
         // Добавляем расширение .obj если его нет
         if (!filename.toLowerCase().endsWith(".obj")) {
             filename += ".obj";
@@ -43,6 +54,7 @@ public class PolyhedronIO {
         }
     }
 
+    // В методе loadFromFile добавьте обработку нормалей после загрузки:
     public static Polyhedron loadFromFile(String filename) throws IOException {
         try (BufferedReader reader = new BufferedReader(new FileReader(filename))) {
             List<Point3D> vertices = new java.util.ArrayList<>();
@@ -53,7 +65,6 @@ public class PolyhedronIO {
             while ((line = reader.readLine()) != null) {
                 line = line.trim();
 
-                // Пропускаем комментарии и пустые строки
                 if (line.isEmpty() || line.startsWith("#")) {
                     continue;
                 }
@@ -65,7 +76,6 @@ public class PolyhedronIO {
 
                 String keyword = parts[0];
 
-                // Обрабатываем вершины
                 if ("v".equals(keyword) && parts.length >= 4) {
                     try {
                         double x = Double.parseDouble(parts[1]);
@@ -76,15 +86,12 @@ public class PolyhedronIO {
                         System.err.println("Ошибка чтения вершины: " + line);
                     }
                 }
-                // Обрабатываем грани
                 else if ("f".equals(keyword) && parts.length >= 3) {
                     Face face = new Face();
                     for (int i = 1; i < parts.length; i++) {
                         try {
-                            // OBJ формат может содержать: vertex/texture/normal
-                            // Нам нужен только vertex индекс (первое число)
                             String vertexPart = parts[i].split("/")[0];
-                            int vertexIndex = Integer.parseInt(vertexPart) - 1; // OBJ индексы с 1, наши с 0
+                            int vertexIndex = Integer.parseInt(vertexPart) - 1;
 
                             if (vertexIndex >= 0 && vertexIndex < vertices.size()) {
                                 face.addVertex(vertices.get(vertexIndex));
@@ -99,7 +106,14 @@ public class PolyhedronIO {
                 }
             }
 
-            return new Polyhedron(faces, vertices);
+            Polyhedron polyhedron = new Polyhedron(faces, vertices);
+
+            // Пересчитываем нормали для всех граней
+            for (Face face : polyhedron.getFaces()) {
+                // Нормаль будет автоматически пересчитана при создании Face
+            }
+
+            return polyhedron;
         }
     }
 }

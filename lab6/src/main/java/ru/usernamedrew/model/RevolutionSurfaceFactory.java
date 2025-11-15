@@ -4,13 +4,32 @@ package ru.usernamedrew.model;
 import java.util.ArrayList;
 import java.util.List;
 
+// строит 3D модель вращением образующей вокруг оси Y
 public class RevolutionSurfaceFactory {
 
     public enum Axis {
         X, Y, Z
     }
 
+    // Метод создает полную 3D модель фигуры вращения, готовую для:
+    //
+    //Отображения в GraphicsPanel
+    //Применения аффинных преобразований
+    //Сохранения в файл формата OBJ
+    //Дальнейшей обработки в приложении
     public static Polyhedron createRevolutionSurface(List<Point3D> generatrix, Axis axis, int divisions) {
+        // Алгоритм работы:
+        // 1. Валидация входных данных (образующая >= 2 точек, разбиения >= 3)
+        // 2. Вычисление шага угла: 360 / divisions
+        // 3. Создание сетки вершин:
+        //    - Для каждого угла от 0 до 360 с шагом angleStep
+        //    - Для каждой точки образующей применяется вращение вокруг выбранной оси
+        //    - Все точки добавляются в Polyhedron
+        // 4. Создание граней:
+        //    - Для каждого "пояса" между соседними углами вращения
+        //    - Для каждой пары соседних точек образующей
+        //    - Создается четырехугольная грань между текущим и следующим поясом
+        // 5. Возврат готовой модели
         if (generatrix == null || generatrix.size() < 2) {
             throw new IllegalArgumentException("Generatrix must contain at least 2 points");
         }
