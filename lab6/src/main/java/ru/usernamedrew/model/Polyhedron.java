@@ -1,7 +1,11 @@
 package ru.usernamedrew.model;
 
+import ru.usernamedrew.util.AffineTransform;
+
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 public class Polyhedron {
     private final List<Face> faces;
@@ -54,5 +58,25 @@ public class Polyhedron {
         }
 
         return polyhedron;
+    }
+
+    public Point3D getCenter() {
+        Set<Point3D> uniqueVertices = new HashSet<>();
+        for (Face face : getFaces()) {
+            uniqueVertices.addAll(face.getVertices());
+        }
+
+        if (uniqueVertices.isEmpty()) {
+            return new Point3D(0, 0, 0);
+        }
+        return AffineTransform.getCenter(new java.util.ArrayList<>(uniqueVertices));
+    }
+
+    public void recalculateNormals() {
+        Point3D objectCenter = getCenter();
+        for (Face face : getFaces()) {
+            face.computeRawNormal(); // Сначала базовая нормаль
+            face.orientNormal(objectCenter); // Затем ориентация
+        }
     }
 }

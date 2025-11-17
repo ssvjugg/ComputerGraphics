@@ -42,4 +42,22 @@ public record Point3D(double x, double y, double z) {
         if (len == 0) return this;
         return new Point3D(x / len, y / len, z / len);
     }
+
+    public double dot(Point3D o) {
+        return x * o.x + y * o.y + z * o.z;
+    }
+
+    public Point3D cross(Point3D o) {
+        double cx = y * o.z - z * o.y;
+        double cy = z * o.x - x * o.z;
+        double cz = x * o.y - y * o.x;
+        return new Point3D(cx, cy, cz);
+    }
+
+    public double distanceTo(Point3D o) {
+        double dx = x - o.x;
+        double dy = y - o.y;
+        double dz = z - o.z;
+        return Math.sqrt(dx * dx + dy * dy + dz * dz);
+    }
 }
