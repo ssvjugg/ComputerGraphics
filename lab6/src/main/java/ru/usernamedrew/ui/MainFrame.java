@@ -81,7 +81,9 @@ public class MainFrame extends JFrame {
                 case "Гексаэдр" -> currentPolyhedron = RegularPolyhedra.createHexahedron();
                 case "Октаэдр" -> currentPolyhedron = RegularPolyhedra.createOctahedron();
             }
+            currentPolyhedron.recalculateNormals();
             graphicsPanel.setPolyhedron(currentPolyhedron);
+            graphicsPanel.requestFocusInWindow();
         });
 
         // Выбор проекции
@@ -93,6 +95,7 @@ public class MainFrame extends JFrame {
             String selected = (String) projectionCombo.getSelectedItem();
             if (selected != null) {
                 String projectionType = selected.equals("Аксонометрическая") ? "axonometric" : "perspective";
+                graphicsPanel.requestFocusInWindow();
                 graphicsPanel.setProjectionType(projectionType);
             }
         });
@@ -135,10 +138,6 @@ public class MainFrame extends JFrame {
         panel.add(arbitraryRotateBtn);
         panel.add(surfacePanel);
 
-        // Кнопка для изменения вектора обзора
-        JButton viewVectorBtn = new JButton("Изменить вектор обзора");
-        viewVectorBtn.addActionListener(this::handleViewVectorChange);
-
         // Чекбокс для включения/отключения отсечения граней
         JCheckBox backfaceCullingCheckbox = new JCheckBox("Отсечение нелицевых граней", true);
         backfaceCullingCheckbox.addActionListener(e -> {
@@ -146,14 +145,7 @@ public class MainFrame extends JFrame {
             graphicsPanel.requestFocusInWindow();
         });
 
-        // Кнопка для автоматического вращения
-        JButton autoRotateBtn = new JButton("Автовращение");
-        autoRotateBtn.addActionListener(this::handleAutoRotation);
-
-        // Добавляем новые компоненты
-        panel.add(viewVectorBtn);
         panel.add(backfaceCullingCheckbox);
-        panel.add(autoRotateBtn);
 
         JButton cameraModeBtn = new JButton("Режим камеры");
         cameraModeBtn.addActionListener(e -> toggleCameraMode());
@@ -188,72 +180,6 @@ public class MainFrame extends JFrame {
         }
 
         graphicsPanel.requestFocusInWindow();
-    }
-
-    // Обработчик изменения вектора обзора
-// Обработчик изменения вектора обзора - УЛУЧШЕННАЯ ВЕРСИЯ
-    private void handleViewVectorChange(ActionEvent e) {
-        // Предлагаем предустановленные варианты или ручной ввод
-        String[] options = {
-                "Стандартный (0,0,-1)",
-                "Сверху (0,1,0)",
-                "Снизу (0,-1,0)",
-                "Слева (-1,0,0)",
-                "Справа (1,0,0)",
-                "Сзади (0,0,1)",
-                "Ручной ввод"
-        };
-
-        String choice = (String) JOptionPane.showInputDialog(this,
-                "Выберите направление обзора:",
-                "Вектор обзора",
-                JOptionPane.QUESTION_MESSAGE,
-                null,
-                options,
-                options[0]);
-
-        if (choice == null) return;
-
-        Point3D newViewVector;
-
-        switch (choice) {
-            case "Стандартный (0,0,-1)":
-                newViewVector = new Point3D(0, 0, -1);
-                break;
-            case "Сверху (0,1,0)":
-                newViewVector = new Point3D(0, 1, 0);
-                break;
-            case "Снизу (0,-1,0)":
-                newViewVector = new Point3D(0, -1, 0);
-                break;
-            case "Слева (-1,0,0)":
-                newViewVector = new Point3D(-1, 0, 0);
-                break;
-            case "Справа (1,0,0)":
-                newViewVector = new Point3D(1, 0, 0);
-                break;
-            case "Сзади (0,0,1)":
-                newViewVector = new Point3D(0, 0, 1);
-                break;
-            case "Ручной ввод":
-                newViewVector = handleManualViewVectorInput();
-                if (newViewVector == null) return;
-                break;
-            default:
-                return;
-        }
-
-        graphicsPanel.setViewVector(newViewVector);
-
-        // Показываем информацию о текущем векторе
-        JOptionPane.showMessageDialog(this,
-                "Вектор обзора установлен:\n" +
-                        String.format("X: %.2f, Y: %.2f, Z: %.2f",
-                                newViewVector.x(), newViewVector.y(), newViewVector.z()) +
-                        "\n\nДля лучшего эффекта:\n" +
-                        "1. Используйте сложные фигуры (сфера, тор)\n" +
-                        "2. Включите отсечение нелицевых граней\n" +
-                        "3. Используйте аксонометрическую проекцию");
     }
 
     private Point3D handleManualViewVectorInput() {
@@ -325,6 +251,7 @@ public class MainFrame extends JFrame {
 
             double[][] matrix = AffineTransform.createTranslationMatrix(dx, dy, dz);
             currentPolyhedron = currentPolyhedron.transform(matrix);
+            currentPolyhedron.recalculateNormals();
             graphicsPanel.setPolyhedron(currentPolyhedron);
             graphicsPanel.requestFocusInWindow();
         } catch (NumberFormatException ex) {
@@ -344,6 +271,7 @@ public class MainFrame extends JFrame {
             double[][] transform = AffineTransform.multiplyMatrices(T_pos, M1);
 
             currentPolyhedron = currentPolyhedron.transform(transform);
+            currentPolyhedron.recalculateNormals();
             graphicsPanel.setPolyhedron(currentPolyhedron);
             graphicsPanel.requestFocusInWindow();
         } catch (NumberFormatException ex) {
@@ -396,6 +324,7 @@ public class MainFrame extends JFrame {
             double[][] transform = AffineTransform.multiplyMatrices(T_pos, M1);
 
             currentPolyhedron = currentPolyhedron.transform(transform);
+            currentPolyhedron.recalculateNormals();
             graphicsPanel.setPolyhedron(currentPolyhedron);
             graphicsPanel.requestFocusInWindow();
         } catch (NumberFormatException ex) {
@@ -473,6 +402,7 @@ public class MainFrame extends JFrame {
         String planeCode = plane.split(" ")[1].toLowerCase();
         double[][] matrix = AffineTransform.createReflectionMatrix(planeCode);
         currentPolyhedron = currentPolyhedron.transform(matrix);
+        currentPolyhedron.recalculateNormals();
         graphicsPanel.setPolyhedron(currentPolyhedron);
         graphicsPanel.requestFocusInWindow();
     }
@@ -509,6 +439,7 @@ public class MainFrame extends JFrame {
             double[][] matrix = AffineTransform.createRotationAroundArbitraryAxis(A, V, angle);
 
             currentPolyhedron = currentPolyhedron.transform(matrix);
+            currentPolyhedron.recalculateNormals();
             graphicsPanel.setPolyhedron(currentPolyhedron);
             graphicsPanel.requestFocusInWindow();
         } catch (NumberFormatException ex) {
@@ -571,6 +502,7 @@ public class MainFrame extends JFrame {
             }
 
             currentPolyhedron = SurfaceFactory.createSurface(function, x0, x1, y0, y1, n, n);
+            currentPolyhedron.recalculateNormals();
             graphicsPanel.setPolyhedron(currentPolyhedron);
             graphicsPanel.requestFocusInWindow();
         } catch (NumberFormatException ex) {
@@ -672,6 +604,7 @@ public class MainFrame extends JFrame {
             }
 
             currentPolyhedron = RevolutionSurfaceFactory.createRevolutionSurface(generatrix, axis, divisions);
+            currentPolyhedron.recalculateNormals();
             graphicsPanel.setPolyhedron(currentPolyhedron);
             graphicsPanel.requestFocusInWindow();
         } catch (NumberFormatException ex) {

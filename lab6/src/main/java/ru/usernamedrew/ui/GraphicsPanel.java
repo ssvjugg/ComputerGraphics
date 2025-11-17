@@ -16,7 +16,7 @@ public class GraphicsPanel extends JPanel {
     private double scale = 50;
     private int centerX, centerY;
     private boolean backfaceCulling = true; // Флаг отсечения нелицевых граней
-    private Point3D viewVector = new Point3D(0, 0, -1); // Вектор обзора по умолчанию
+    //private Point3D viewVector = new Point3D(0, 0, -1); // Вектор обзора по умолчанию
 
     private Camera camera;
 
@@ -46,7 +46,7 @@ public class GraphicsPanel extends JPanel {
     }
 
     public void setViewVector(Point3D viewVector) {
-        this.viewVector = viewVector.normalize();
+        //this.viewVector = viewVector.normalize();
         repaint();
     }
 
@@ -144,8 +144,8 @@ public class GraphicsPanel extends JPanel {
         if (backfaceCulling) {
             g2d.setColor(Color.RED);
             g2d.drawString(String.format("Грани: %d/%d видимых", visibleFaces, totalFaces), 10, 20);
-            g2d.drawString(String.format("Вектор обзора: (%.2f, %.2f, %.2f)",
-                    viewVector.x(), viewVector.y(), viewVector.z()), 10, 40);
+            //g2d.drawString(String.format("Вектор обзора: (%.2f, %.2f, %.2f)",
+                    //viewVector.x(), viewVector.y(), viewVector.z()), 10, 40);
         }
     }
 
@@ -165,15 +165,8 @@ public class GraphicsPanel extends JPanel {
             dotProduct = normal.dot(viewToFace);
 
             return dotProduct < 0;
-        } else if ("perspective".equals(projectionType)) {
-            Point3D viewToFace = faceCenter.subtract(new Point3D(0, 0, 0));
-            viewToFace = viewToFace.normalize();
-            dotProduct = normal.dot(viewToFace);
-
-            return dotProduct < 0;
-        } else {
-            dotProduct = normal.dot(viewVector);
-            return dotProduct > 0;
+        } else{
+            return true;
         }
     }
 
