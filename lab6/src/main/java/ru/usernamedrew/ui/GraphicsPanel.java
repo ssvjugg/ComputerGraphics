@@ -1,5 +1,6 @@
 package ru.usernamedrew.ui;
 
+import ru.usernamedrew.controller.CameraController;
 import ru.usernamedrew.model.*;
 import ru.usernamedrew.util.AffineTransform;
 
@@ -16,6 +17,8 @@ public class GraphicsPanel extends JPanel {
     private int centerX, centerY;
     private boolean backfaceCulling = true; // Флаг отсечения нелицевых граней
     private Point3D viewVector = new Point3D(0, 0, -1); // Вектор обзора по умолчанию
+
+    private Camera camera;
 
     public GraphicsPanel() {
         setBackground(Color.WHITE);
@@ -44,6 +47,11 @@ public class GraphicsPanel extends JPanel {
 
     public void setViewVector(Point3D viewVector) {
         this.viewVector = viewVector.normalize();
+        repaint();
+    }
+
+    public void setCamera(Camera camera) {
+        this.camera = camera;
         repaint();
     }
 
@@ -147,34 +155,24 @@ public class GraphicsPanel extends JPanel {
 
         Point3D normal = face.getNormal();
 
-        // Для перспективной проекции используем вектор от камеры к грани
-        if ("perspective".equals(projectionType)) {
-            // Находим центр грани
-            double centerX = 0, centerY = 0, centerZ = 0;
-            for (Point3D vertex : face.getVertices()) {
-                centerX += vertex.x();
-                centerY += vertex.y();
-                centerZ += vertex.z();
-            }
-            int count = face.getVertices().size();
-            Point3D faceCenter = new Point3D(centerX / count, centerY / count, centerZ / count);
+        Point3D faceCenter = AffineTransform.getCenter(face.getVertices());
+        double dotProduct;
 
-            // Вектор от камеры к центру грани (камера в начале координат смотрит вдоль Z)
+        if ("perspective".equals(projectionType) && camera != null) {
+            Point3D cameraPos = camera.getPosition();
+            Point3D viewToFace = faceCenter.subtract(cameraPos).normalize();
+
+            dotProduct = normal.dot(viewToFace);
+
+            return dotProduct < 0;
+        } else if ("perspective".equals(projectionType)) {
             Point3D viewToFace = faceCenter.subtract(new Point3D(0, 0, 0));
             viewToFace = viewToFace.normalize();
+            dotProduct = normal.dot(viewToFace);
 
-            // Скалярное произведение
-            double dotProduct = normal.x() * viewToFace.x() +
-                    normal.y() * viewToFace.y() +
-                    normal.z() * viewToFace.z();
-
-            return dotProduct < 0; // Для перспективы условие обратное
+            return dotProduct < 0;
         } else {
-            // Для аксонометрии используем заданный вектор обзора
-            double dotProduct = normal.x() * viewVector.x() +
-                    normal.y() * viewVector.y() +
-                    normal.z() * viewVector.z();
-
+            dotProduct = normal.dot(viewVector);
             return dotProduct > 0;
         }
     }
@@ -182,14 +180,7 @@ public class GraphicsPanel extends JPanel {
     // Отрисовка нормалей граней для отладки
     private void drawFaceNormal(Graphics2D g2d, Face face) {
         // Находим центр грани
-        double centerX = 0, centerY = 0, centerZ = 0;
-        for (Point3D vertex : face.getVertices()) {
-            centerX += vertex.x();
-            centerY += vertex.y();
-            centerZ += vertex.z();
-        }
-        int count = face.getVertices().size();
-        Point3D faceCenter = new Point3D(centerX / count, centerY / count, centerZ / count);
+        Point3D faceCenter = AffineTransform.getCenter(face.getVertices());
 
         // Конец нормали
         Point3D normalEnd = faceCenter.add(face.getNormal().multiply(0.5));
@@ -206,6 +197,21 @@ public class GraphicsPanel extends JPanel {
     }
 
     private Point2D projectPoint(Point3D point3d) {
+        Point3D transformedPoint;
+        if ("perspective".equals(projectionType) && camera != null) {
+            // Применяем view и perspective матрицы камеры
+            double[][] view = camera.getViewMatrix();
+            double[][] projection = camera.getPerspectiveMatrix();
+            Point3D viewPoint = point3d.transform(view);
+            transformedPoint = viewPoint.transform(projection);
+
+            // Преобразуем к экранным координатам
+            int screenX = (int) (centerX + transformedPoint.x() * scale);
+            int screenY = (int) (centerY - transformedPoint.y() * scale);
+            return new Point2D.Double(screenX, screenY);
+        }
+
+
         Point3D scaledPoint = new Point3D(point3d.x() * scale, point3d.y() * scale, point3d.z() * scale);
 
         double[][] projectionMatrix;

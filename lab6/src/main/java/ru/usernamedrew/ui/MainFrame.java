@@ -1,5 +1,6 @@
 package ru.usernamedrew.ui;
 
+import ru.usernamedrew.controller.CameraController;
 import ru.usernamedrew.model.*;
 import ru.usernamedrew.util.AffineTransform;
 import ru.usernamedrew.util.PolyhedronIO;
@@ -7,6 +8,7 @@ import ru.usernamedrew.util.PolyhedronIO;
 import javax.swing.*;
 import java.awt.*;
 import java.awt.event.ActionEvent;
+import java.awt.event.MouseListener;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Objects;
@@ -15,6 +17,9 @@ import java.util.function.BiFunction;
 public class MainFrame extends JFrame {
     private GraphicsPanel graphicsPanel;
     private Polyhedron currentPolyhedron;
+    private Camera camera;
+    private CameraController cameraController;
+    private boolean cameraMode = false;
 
     public MainFrame() {
         initializeUI();
@@ -138,6 +143,7 @@ public class MainFrame extends JFrame {
         JCheckBox backfaceCullingCheckbox = new JCheckBox("Отсечение нелицевых граней", true);
         backfaceCullingCheckbox.addActionListener(e -> {
             graphicsPanel.setBackfaceCulling(backfaceCullingCheckbox.isSelected());
+            graphicsPanel.requestFocusInWindow();
         });
 
         // Кнопка для автоматического вращения
@@ -149,7 +155,39 @@ public class MainFrame extends JFrame {
         panel.add(backfaceCullingCheckbox);
         panel.add(autoRotateBtn);
 
+        JButton cameraModeBtn = new JButton("Режим камеры");
+        cameraModeBtn.addActionListener(e -> toggleCameraMode());
+        panel.add(cameraModeBtn);
+
         return panel;
+    }
+
+    private void toggleCameraMode() {
+        cameraMode = !cameraMode;
+
+        if (cameraMode) {
+            // Инициализация камеры и контроллера
+            camera = new Camera(new Point3D(0, 0, 5), -90, 0);
+            cameraController = new CameraController(camera, graphicsPanel);
+            graphicsPanel.setProjectionType("perspective");
+            graphicsPanel.setCamera(camera);
+
+            graphicsPanel.addKeyListener(cameraController);
+            graphicsPanel.setFocusable(true);
+            graphicsPanel.requestFocusInWindow();
+            JOptionPane.showMessageDialog(this, "Режим камеры включен. Используйте WASD, SPACE, SHIFT и мышь для управления.");
+        } else {
+            // Выключение режима камеры
+            if (cameraController != null) {
+                graphicsPanel.removeKeyListener(cameraController);
+                graphicsPanel.removeMouseListener((MouseListener) cameraController);
+                graphicsPanel.removeMouseMotionListener(cameraController);
+                cameraController = null;
+            }
+            JOptionPane.showMessageDialog(this, "Режим камеры выключен.");
+        }
+
+        graphicsPanel.requestFocusInWindow();
     }
 
     // Обработчик изменения вектора обзора
@@ -288,6 +326,7 @@ public class MainFrame extends JFrame {
             double[][] matrix = AffineTransform.createTranslationMatrix(dx, dy, dz);
             currentPolyhedron = currentPolyhedron.transform(matrix);
             graphicsPanel.setPolyhedron(currentPolyhedron);
+            graphicsPanel.requestFocusInWindow();
         } catch (NumberFormatException ex) {
             JOptionPane.showMessageDialog(this, "Неверный ввод!");
         }
@@ -306,6 +345,7 @@ public class MainFrame extends JFrame {
 
             currentPolyhedron = currentPolyhedron.transform(transform);
             graphicsPanel.setPolyhedron(currentPolyhedron);
+            graphicsPanel.requestFocusInWindow();
         } catch (NumberFormatException ex) {
             JOptionPane.showMessageDialog(this, "Неверный ввод!");
         }
@@ -357,6 +397,7 @@ public class MainFrame extends JFrame {
 
             currentPolyhedron = currentPolyhedron.transform(transform);
             graphicsPanel.setPolyhedron(currentPolyhedron);
+            graphicsPanel.requestFocusInWindow();
         } catch (NumberFormatException ex) {
             JOptionPane.showMessageDialog(this, "Неверный ввод!");
         }
@@ -433,6 +474,7 @@ public class MainFrame extends JFrame {
         double[][] matrix = AffineTransform.createReflectionMatrix(planeCode);
         currentPolyhedron = currentPolyhedron.transform(matrix);
         graphicsPanel.setPolyhedron(currentPolyhedron);
+        graphicsPanel.requestFocusInWindow();
     }
 
     private void handleArbitraryRotation(ActionEvent e) {
@@ -468,7 +510,7 @@ public class MainFrame extends JFrame {
 
             currentPolyhedron = currentPolyhedron.transform(matrix);
             graphicsPanel.setPolyhedron(currentPolyhedron);
-
+            graphicsPanel.requestFocusInWindow();
         } catch (NumberFormatException ex) {
             JOptionPane.showMessageDialog(this, "Ошибка.");
         }
@@ -487,7 +529,7 @@ public class MainFrame extends JFrame {
         panel.add(new JLabel("Поверхность:"));
         panel.add(functionCombo);
         panel.add(buildSurfaceBtn);
-
+        graphicsPanel.requestFocusInWindow();
         return panel;
     }
 
@@ -530,7 +572,7 @@ public class MainFrame extends JFrame {
 
             currentPolyhedron = SurfaceFactory.createSurface(function, x0, x1, y0, y1, n, n);
             graphicsPanel.setPolyhedron(currentPolyhedron);
-
+            graphicsPanel.requestFocusInWindow();
         } catch (NumberFormatException ex) {
             JOptionPane.showMessageDialog(this, "Ошибка");
         }
@@ -631,7 +673,7 @@ public class MainFrame extends JFrame {
 
             currentPolyhedron = RevolutionSurfaceFactory.createRevolutionSurface(generatrix, axis, divisions);
             graphicsPanel.setPolyhedron(currentPolyhedron);
-
+            graphicsPanel.requestFocusInWindow();
         } catch (NumberFormatException ex) {
             JOptionPane.showMessageDialog(this, "Неверный формат числа");
         } catch (Exception ex) {
