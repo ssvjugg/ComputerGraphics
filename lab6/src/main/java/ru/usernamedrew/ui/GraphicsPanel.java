@@ -1,8 +1,9 @@
 package ru.usernamedrew.ui;
 
-import ru.usernamedrew.controller.CameraController;
 import ru.usernamedrew.model.*;
 import ru.usernamedrew.util.AffineTransform;
+import ru.usernamedrew.util.ProjectionTransformer;
+import ru.usernamedrew.util.ZBuffer;
 
 import javax.swing.*;
 import java.awt.*;
@@ -15,6 +16,8 @@ public class GraphicsPanel extends JPanel {
     private String projectionType = "axonometric";
     private double scale = 50;
     private int centerX, centerY;
+    private ZBuffer zBuffer;
+    private boolean zBufferEnabled = false; // Флаг использования z-буфера
     private boolean backfaceCulling = true; // Флаг отсечения нелицевых граней
     //private Point3D viewVector = new Point3D(0, 0, -1); // Вектор обзора по умолчанию
 
@@ -23,6 +26,10 @@ public class GraphicsPanel extends JPanel {
     public GraphicsPanel() {
         setBackground(Color.WHITE);
         setPreferredSize(new Dimension(800, 600));
+    }
+
+    public boolean isZBufferEnabled() {
+        return zBufferEnabled;
     }
 
     public void setPolyhedron(Polyhedron polyhedron) {
@@ -37,6 +44,11 @@ public class GraphicsPanel extends JPanel {
 
     public void setScale(double scale) {
         this.scale = scale;
+        repaint();
+    }
+
+    public void setZBufferEnabled(boolean enabled) {
+        this.zBufferEnabled = enabled;
         repaint();
     }
 
@@ -70,8 +82,11 @@ public class GraphicsPanel extends JPanel {
         // Рисуем координатные оси
         drawCoordinateAxes(g2d);
 
-        // Рисуем многогранник
-        drawPolyhedron(g2d);
+        if (zBufferEnabled) {
+            drawWithZBuffer(g2d);
+        } else {
+            drawPolyhedron(g2d);
+        }
     }
 
     //отрисовка координатных осей
@@ -147,6 +162,33 @@ public class GraphicsPanel extends JPanel {
             //g2d.drawString(String.format("Вектор обзора: (%.2f, %.2f, %.2f)",
                     //viewVector.x(), viewVector.y(), viewVector.z()), 10, 40);
         }
+    }
+
+    private void drawWithZBuffer(Graphics2D g2d) {
+        int width = getWidth();
+        int height = getHeight();
+
+        // Инициализация z-буфера
+        if (zBuffer == null || zBuffer.getWidth() != width || zBuffer.getHeight() != height) {
+            zBuffer = new ZBuffer(width, height);
+        }
+        zBuffer.clear();
+
+        // Рендеринг объекта в z-буфер
+        if (polyhedron != null) {
+            // Создаем ProjectionTransformer
+            ProjectionTransformer projector = new ProjectionTransformer(
+                    projectionType, scale, centerX, centerY);
+
+            // Рендерим полиэдр
+            zBuffer.renderPolyhedron(polyhedron, projector);
+        }
+
+        // Отображаем результат
+        zBuffer.display(g2d, getBackground());
+
+        // Рисуем координатные оси поверх z-буфера
+        drawCoordinateAxes(g2d);
     }
 
     // Проверка видимости грани

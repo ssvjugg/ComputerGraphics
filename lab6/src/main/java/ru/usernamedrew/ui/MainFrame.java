@@ -59,10 +59,39 @@ public class MainFrame extends JFrame {
         // Вторая строка - основные управления
         JPanel basicControlPanel = createBasicControlPanel();
 
+        JPanel zBufferPanel = createZBufferControlPanel();
+
         mainPanel.add(revolutionPanel);
         mainPanel.add(basicControlPanel);
+        mainPanel.add(zBufferPanel);
 
         return mainPanel;
+    }
+
+    private JPanel createZBufferControlPanel() {
+        JPanel panel = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        panel.setPreferredSize(new Dimension(1000, 40));
+
+        // Кнопка включения/выключения z-буфера
+        JButton zBufferToggleBtn = new JButton("Включить Z-буфер");
+        zBufferToggleBtn.addActionListener(e -> toggleZBuffer(zBufferToggleBtn));
+
+        panel.add(zBufferToggleBtn);
+
+        return panel;
+    }
+
+    private void toggleZBuffer(JButton button) {
+        boolean currentlyEnabled = graphicsPanel.isZBufferEnabled();
+        graphicsPanel.setZBufferEnabled(!currentlyEnabled);
+
+        if (!currentlyEnabled) {
+            button.setText("Выключить Z-буфер");
+        } else {
+            button.setText("Включить Z-буфер");
+        }
+
+        graphicsPanel.repaint();
     }
 
     private JPanel createBasicControlPanel() {
@@ -519,8 +548,6 @@ public class MainFrame extends JFrame {
 
         return new Point3D(V.x() / length, V.y() / length, V.z() / length);
     }
-
-    // Добавляем в MainFrame.java новые методы и компоненты
 
     private JPanel createRevolutionControlPanel() {
         // Создает UI элементы:
