@@ -175,16 +175,24 @@ public class GraphicsPanel extends JPanel {
         zBuffer.clear();
 
         // Рендеринг объекта в z-буфер
-        if (polyhedron != null) {
-            // Создаем ProjectionTransformer
-            ProjectionTransformer projector = new ProjectionTransformer(
-                    projectionType, scale, centerX, centerY);
-
-            // Рендерим полиэдр
-            zBuffer.renderPolyhedron(polyhedron, projector);
+        if (polyhedron == null || camera == null) {
+            zBuffer.display(g2d, getBackground());
+            drawCoordinateAxes(g2d);
+            return;
         }
 
-        // Отображаем результат
+        ProjectionTransformer projector;
+        if (camera != null) {
+            projector = new ProjectionTransformer(camera, scale, centerX, centerY);
+            zBuffer.setCamera(camera);
+        } else {
+            // Старый режим
+            projector = new ProjectionTransformer(projectionType, scale, centerX, centerY);
+            zBuffer.setCamera(null);
+        }
+
+        zBuffer.renderPolyhedron(polyhedron, projector);
+
         zBuffer.display(g2d, getBackground());
 
         // Рисуем координатные оси поверх z-буфера
