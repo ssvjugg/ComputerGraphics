@@ -2,6 +2,7 @@
 package ru.usernamedrew.util;
 
 import ru.usernamedrew.model.*;
+
 import java.awt.*;
 import java.awt.geom.Point2D;
 import java.util.List;
@@ -15,6 +16,8 @@ public class ZBuffer {
     private Point3D lightDirection;
     private Color ambientColor;
     private Color diffuseColor;
+
+    private Camera camera = null;
 
     public ZBuffer(int width, int height) {
         this.width = width;
@@ -62,7 +65,13 @@ public class ZBuffer {
         for (int i = 0; i < vertices.size(); i++) {
             Point3D vertex = vertices.get(i);
             projected[i] = projector.project(vertex);
-            depths[i] = -vertex.z(); // Глубина (меньшее z = ближе к наблюдателю)
+            if (camera != null) {
+                // После view-матрицы z — это расстояние от камеры
+                Point3D viewSpace = vertex.transform(camera.getViewMatrix());
+                depths[i] = -viewSpace.z(); // чем больше — тем дальше
+            } else {
+                depths[i] = -vertex.z(); // старое поведение
+            }
         }
 
         // Находим ограничивающий прямоугольник
@@ -170,19 +179,21 @@ public class ZBuffer {
 
     private double calculateLighting(Point3D normal) {
         // Простое затенение по Фонгу
-        double diffuse = Math.max(0, normal.x() * lightDirection.x() +
-                normal.y() * lightDirection.y() +
-                normal.z() * lightDirection.z());
-
-        return Math.min(1.0, 0.2 + 0.8 * diffuse); // ambient + diffuse
+//        double diffuse = Math.max(0, normal.x() * lightDirection.x() +
+//                normal.y() * lightDirection.y() +
+//                normal.z() * lightDirection.z());
+//
+//        return Math.min(1.0, 0.2 + 0.8 * diffuse); // ambient + diffuse
+        return 1.0;
     }
 
     private Color calculateFaceColor(double intensity) {
-        int r = Math.min(255, ambientColor.getRed() + (int)(diffuseColor.getRed() * intensity));
-        int g = Math.min(255, ambientColor.getGreen() + (int)(diffuseColor.getGreen() * intensity));
-        int b = Math.min(255, ambientColor.getBlue() + (int)(diffuseColor.getBlue() * intensity));
+//        int r = Math.min(255, ambientColor.getRed() + (int)(diffuseColor.getRed() * intensity));
+//        int g = Math.min(255, ambientColor.getGreen() + (int)(diffuseColor.getGreen() * intensity));
+//        int b = Math.min(255, ambientColor.getBlue() + (int)(diffuseColor.getBlue() * intensity));
 
-        return new Color(r, g, b);
+        //return new Color(r, g, b);
+        return new Color(222, 78, 78);
     }
 
     public void display(Graphics2D g2d, Color backgroundColor) {
@@ -212,6 +223,15 @@ public class ZBuffer {
         this.diffuseColor = diffuseColor;
     }
 
-    public int getWidth() { return width; }
-    public int getHeight() { return height; }
+    public void setCamera(Camera camera) {
+        this.camera = camera;
+    }
+
+    public int getWidth() {
+        return width;
+    }
+
+    public int getHeight() {
+        return height;
+    }
 }

@@ -75,7 +75,6 @@ public class MainFrame extends JFrame {
         // Кнопка включения/выключения z-буфера
         JButton zBufferToggleBtn = new JButton("Включить Z-буфер");
         zBufferToggleBtn.addActionListener(e -> toggleZBuffer(zBufferToggleBtn));
-
         panel.add(zBufferToggleBtn);
 
         return panel;
@@ -90,7 +89,7 @@ public class MainFrame extends JFrame {
         } else {
             button.setText("Включить Z-буфер");
         }
-
+        graphicsPanel.requestFocusInWindow();
         graphicsPanel.repaint();
     }
 
