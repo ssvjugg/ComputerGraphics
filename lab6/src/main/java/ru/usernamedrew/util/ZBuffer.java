@@ -12,22 +12,12 @@ public class ZBuffer {
     private Color[][] frameBuffer;
     private int width, height;
 
-    // Параметры освещения
-    private Point3D lightDirection;
-    private Color ambientColor;
-    private Color diffuseColor;
-
     private Camera camera = null;
 
     public ZBuffer(int width, int height) {
         this.width = width;
         this.height = height;
         initializeBuffers();
-
-        // Параметры освещения по умолчанию
-        this.lightDirection = new Point3D(0, 0, -1).normalize();
-        this.ambientColor = new Color(50, 50, 50);
-        this.diffuseColor = new Color(200, 200, 200);
     }
 
     private void initializeBuffers() {
@@ -36,7 +26,7 @@ public class ZBuffer {
 
         for (int x = 0; x < width; x++) {
             for (int y = 0; y < height; y++) {
-                zBuffer[x][y] = Double.NEGATIVE_INFINITY;
+                zBuffer[x][y] = Double.MAX_VALUE;
                 frameBuffer[x][y] = null;
             }
         }
@@ -46,7 +36,13 @@ public class ZBuffer {
         initializeBuffers();
     }
 
-    public void renderPolyhedron(Polyhedron polyhedron, ProjectionTransformer projector) {
+    public void renderScene(List<Polyhedron> scene, ProjectionTransformer projector) {
+        for (Polyhedron p : scene) {
+            renderPolyhedron(p, projector);
+        }
+    }
+
+    private void renderPolyhedron(Polyhedron polyhedron, ProjectionTransformer projector) {
         if (polyhedron == null) return;
 
         for (Face face : polyhedron.getFaces()) {
@@ -58,169 +54,104 @@ public class ZBuffer {
         List<Point3D> vertices = face.getVertices();
         if (vertices.size() < 3) return;
 
-        // Проецируем вершины и вычисляем их глубину
-        Point2D[] projected = new Point2D[vertices.size()];
-        double[] depths = new double[vertices.size()];
+        // Вычисляем цвет грани (плоское затенение)
+        Point3D normal = face.getNormal();
+        Color faceColor = calculateFaceColor(normal);
 
+        // Подготавливаем вершины (экранные координаты + глубина)
+        Point3D[] screenVerts = new Point3D[vertices.size()];
         for (int i = 0; i < vertices.size(); i++) {
-            Point3D vertex = vertices.get(i);
-            projected[i] = projector.project(vertex);
+            Point3D v = vertices.get(i);
+            Point2D p2d = projector.project(v);
+
+            double depth;
             if (camera != null) {
-                // После view-матрицы z — это расстояние от камеры
-                Point3D viewSpace = vertex.transform(camera.getViewMatrix());
-                depths[i] = -viewSpace.z(); // чем больше — тем дальше
+                // Z в пространстве камеры (отрицательный перед камерой, поэтому берем -Z для дистанции)
+                depth = -v.transform(camera.getViewMatrix()).z();
             } else {
-                depths[i] = -vertex.z(); // старое поведение
+                // Старый режим без камеры
+                depth = -v.z();
             }
+
+            screenVerts[i] = new Point3D(p2d.getX(), p2d.getY(), depth);
         }
 
-        // Находим ограничивающий прямоугольник
-        int minX = Math.max(0, (int) Math.floor(minX(projected)));
-        int maxX = Math.min(width - 1, (int) Math.ceil(maxX(projected)));
-        int minY = Math.max(0, (int) Math.floor(minY(projected)));
-        int maxY = Math.min(height - 1, (int) Math.ceil(maxY(projected)));
+        // Триангуляция грани (Triangle Fan) для поддержки многоугольников > 3 вершин
+        // 0-1-2, 0-2-3, 0-3-4...
+        for (int i = 1; i < vertices.size() - 1; i++) {
+            drawTriangle(screenVerts[0], screenVerts[i], screenVerts[i + 1], faceColor);
+        }
+    }
 
-        if (minX >= maxX || minY >= maxY) return;
+    private void drawTriangle(Point3D v1, Point3D v2, Point3D v3, Color color) {
+        // Ограничивающий прямоугольник треугольника
+        int minX = (int) Math.max(0, Math.min(v1.x(), Math.min(v2.x(), v3.x())));
+        int maxX = (int) Math.min(width - 1, Math.ceil(Math.max(v1.x(), Math.max(v2.x(), v3.x()))));
+        int minY = (int) Math.max(0, Math.min(v1.y(), Math.min(v2.y(), v3.y())));
+        int maxY = (int) Math.min(height - 1, Math.ceil(Math.max(v1.y(), Math.max(v2.y(), v3.y()))));
 
-        // Вычисляем нормаль для освещения
-        Point3D normal = face.getNormal();
-        double intensity = calculateLighting(normal);
-
-        // Цвет грани с учетом освещения
-        Color faceColor = calculateFaceColor(intensity);
-
-        // Растеризация методом сканирующих строк
+        // Проход по пикселям
         for (int y = minY; y <= maxY; y++) {
             for (int x = minX; x <= maxX; x++) {
-                if (isPointInPolygon(x, y, projected)) {
-                    // Интерполяция глубины
-                    double depth = interpolateDepth(x, y, projected, depths);
+                // Вычисляем барицентрические координаты
+                Point3D bary = barycentric(v1, v2, v3, new Point2D.Double(x, y));
 
-                    // Проверка z-буфера
-                    if (depth > zBuffer[x][y]) {
+                // Если точка внутри треугольника (все координаты >= 0)
+                if (bary.x() >= 0 && bary.y() >= 0 && bary.z() >= 0) {
+                    // Интерполяция глубины: z = w1*z1 + w2*z2 + w3*z3
+                    double depth = bary.x() * v1.z() + bary.y() * v2.z() + bary.z() * v3.z();
+
+                    // Z-Test: если новый пиксель ближе (меньше Z), рисуем его
+                    if (depth < zBuffer[x][y]) {
                         zBuffer[x][y] = depth;
-                        frameBuffer[x][y] = faceColor;
+                        frameBuffer[x][y] = color;
                     }
                 }
             }
         }
     }
 
-    private double minX(Point2D[] points) {
-        double min = Double.MAX_VALUE;
-        for (Point2D p : points) {
-            if (p.getX() < min) min = p.getX();
-        }
-        return min;
-    }
+    // Вычисление барицентрических координат для точки P относительно треугольника ABC
+    private Point3D barycentric(Point3D A, Point3D B, Point3D C, Point2D P) {
+        Point3D v0 = new Point3D(B.x() - A.x(), C.x() - A.x(), A.x() - P.getX());
+        Point3D v1 = new Point3D(B.y() - A.y(), C.y() - A.y(), A.y() - P.getY());
 
-    private double maxX(Point2D[] points) {
-        double max = Double.MIN_VALUE;
-        for (Point2D p : points) {
-            if (p.getX() > max) max = p.getX();
-        }
-        return max;
-    }
+        // Векторное произведение для поиска u, v, 1
+        Point3D u = v0.cross(v1);
 
-    private double minY(Point2D[] points) {
-        double min = Double.MAX_VALUE;
-        for (Point2D p : points) {
-            if (p.getY() < min) min = p.getY();
-        }
-        return min;
-    }
-
-    private double maxY(Point2D[] points) {
-        double max = Double.MIN_VALUE;
-        for (Point2D p : points) {
-            if (p.getY() > max) max = p.getY();
-        }
-        return max;
-    }
-
-    private boolean isPointInPolygon(int x, int y, Point2D[] polygon) {
-        int crossings = 0;
-        int n = polygon.length;
-
-        for (int i = 0; i < n; i++) {
-            Point2D a = polygon[i];
-            Point2D b = polygon[(i + 1) % n];
-
-            if ((a.getY() <= y && b.getY() > y) || (b.getY() <= y && a.getY() > y)) {
-                double t = (y - a.getY()) / (b.getY() - a.getY());
-                double intersectX = a.getX() + t * (b.getX() - a.getX());
-
-                if (intersectX > x) {
-                    crossings++;
-                }
-            }
+        // Если u.z близок к 0, значит треугольник вырожденный
+        if (Math.abs(u.z()) < 1e-2) {
+            return new Point3D(-1, 1, 1);
         }
 
-        return (crossings % 2) == 1;
+        double w = 1.0 - (u.x() + u.y()) / u.z();
+        double v = u.y() / u.z();
+        double t = u.x() / u.z(); // t это третья координата (обычно u, v, w)
+
+        // Возвращаем веса (1-v-t, t, v) -> (wA, wB, wC)
+        return new Point3D(w, t, v);
     }
 
-    private double interpolateDepth(int x, int y, Point2D[] projected, double[] depths) {
-        // Упрощенная интерполяция - среднее значение по вершинам
-        double sum = 0;
-        int count = 0;
+    private Color calculateFaceColor(Point3D normal) {
+        // Простое освещение
+        Point3D lightDir = new Point3D(0, 0, -1).normalize(); // Свет светит от камеры
+        double intensity = Math.max(0.2, normal.dot(lightDir)); // Ambient 0.2
+        intensity = Math.min(1.0, intensity);
 
-        for (int i = 0; i < projected.length; i++) {
-            double dist = Math.sqrt(Math.pow(projected[i].getX() - x, 2) +
-                    Math.pow(projected[i].getY() - y, 2));
-            if (dist < 1.0) { // Если близко к вершине
-                return depths[i];
-            }
-            sum += depths[i] / (dist + 0.1); // Взвешенное по расстоянию
-            count++;
-        }
-
-        return sum / count;
-    }
-
-    private double calculateLighting(Point3D normal) {
-        // Простое затенение по Фонгу
-//        double diffuse = Math.max(0, normal.x() * lightDirection.x() +
-//                normal.y() * lightDirection.y() +
-//                normal.z() * lightDirection.z());
-//
-//        return Math.min(1.0, 0.2 + 0.8 * diffuse); // ambient + diffuse
-        return 1.0;
-    }
-
-    private Color calculateFaceColor(double intensity) {
-//        int r = Math.min(255, ambientColor.getRed() + (int)(diffuseColor.getRed() * intensity));
-//        int g = Math.min(255, ambientColor.getGreen() + (int)(diffuseColor.getGreen() * intensity));
-//        int b = Math.min(255, ambientColor.getBlue() + (int)(diffuseColor.getBlue() * intensity));
-
-        //return new Color(r, g, b);
-        return new Color(222, 78, 78);
+        int val = (int) (255 * intensity);
+        return new Color(val, val, val);
     }
 
     public void display(Graphics2D g2d, Color backgroundColor) {
+        // Отрисовка буфера кадра на экран
         for (int x = 0; x < width; x++) {
             for (int y = 0; y < height; y++) {
                 if (frameBuffer[x][y] != null) {
                     g2d.setColor(frameBuffer[x][y]);
                     g2d.drawLine(x, y, x, y);
-                } else if (backgroundColor != null) {
-                    g2d.setColor(backgroundColor);
-                    g2d.drawLine(x, y, x, y);
                 }
             }
         }
-    }
-
-    // Геттеры и сеттеры для параметров
-    public void setLightDirection(Point3D lightDirection) {
-        this.lightDirection = lightDirection.normalize();
-    }
-
-    public void setAmbientColor(Color ambientColor) {
-        this.ambientColor = ambientColor;
-    }
-
-    public void setDiffuseColor(Color diffuseColor) {
-        this.diffuseColor = diffuseColor;
     }
 
     public void setCamera(Camera camera) {

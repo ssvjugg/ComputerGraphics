@@ -9,10 +9,14 @@ import javax.swing.*;
 import java.awt.*;
 import java.awt.geom.Line2D;
 import java.awt.geom.Point2D;
+import java.util.ArrayList;
 import java.util.List;
 
 public class GraphicsPanel extends JPanel {
-    private Polyhedron polyhedron;
+    private final List<Polyhedron> scene = new ArrayList<>();
+
+    private Polyhedron activePolyhedron;
+
     private String projectionType = "axonometric";
     private double scale = 50;
     private int centerX, centerY;
@@ -28,13 +32,49 @@ public class GraphicsPanel extends JPanel {
         setPreferredSize(new Dimension(800, 600));
     }
 
+    public void addPolyhedron(Polyhedron polyhedron) {
+        if (polyhedron != null) {
+            scene.add(polyhedron);
+            activePolyhedron = polyhedron; // Делаем активным последний добавленный
+            repaint();
+        }
+    }
+
     public boolean isZBufferEnabled() {
         return zBufferEnabled;
     }
 
     public void setPolyhedron(Polyhedron polyhedron) {
-        this.polyhedron = polyhedron;
+
+        this.activePolyhedron = polyhedron;
+
+        if (!scene.isEmpty()) {
+            scene.set(scene.size() - 1, polyhedron);
+        } else {
+            scene.add(polyhedron);
+        }
+
         repaint();
+    }
+
+    // Метод для полной очистки сцены
+    public void clearScene() {
+        scene.clear();
+        activePolyhedron = null;
+        repaint();
+    }
+
+    // Метод обновления активного объекта в списке после трансформации
+    public void updateActivePolyhedron(Polyhedron transformed) {
+        if (activePolyhedron != null && scene.contains(activePolyhedron)) {
+            int index = scene.indexOf(activePolyhedron);
+            scene.set(index, transformed);
+            activePolyhedron = transformed;
+            repaint();
+        } else {
+            // Если сцена пуста или объект потерян
+            addPolyhedron(transformed);
+        }
     }
 
     public void setProjectionType(String type) {
@@ -74,8 +114,6 @@ public class GraphicsPanel extends JPanel {
         centerX = getWidth() / 2;
         centerY = getHeight() / 2;
 
-        if (polyhedron == null) return;
-
         Graphics2D g2d = (Graphics2D) g;
         g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
 
@@ -85,7 +123,9 @@ public class GraphicsPanel extends JPanel {
         if (zBufferEnabled) {
             drawWithZBuffer(g2d);
         } else {
-            drawPolyhedron(g2d);
+            for (Polyhedron p : scene) {
+                drawPolyhedron(g2d, p);
+            }
         }
     }
 
@@ -121,7 +161,7 @@ public class GraphicsPanel extends JPanel {
         g2d.drawString("Z", (int) zAxisEnd2D.getX() + 5, (int) zAxisEnd2D.getY() + 5);
     }
 
-    private void drawPolyhedron(Graphics2D g2d) {
+    private void drawPolyhedron(Graphics2D g2d, Polyhedron polyhedron) {
         if (polyhedron == null) return;
 
         g2d.setStroke(new BasicStroke(2));
@@ -168,34 +208,24 @@ public class GraphicsPanel extends JPanel {
         int width = getWidth();
         int height = getHeight();
 
-        // Инициализация z-буфера
         if (zBuffer == null || zBuffer.getWidth() != width || zBuffer.getHeight() != height) {
             zBuffer = new ZBuffer(width, height);
         }
         zBuffer.clear();
+        zBuffer.setCamera(camera);
 
-        // Рендеринг объекта в z-буфер
-        if (polyhedron == null || camera == null) {
-            zBuffer.display(g2d, getBackground());
-            drawCoordinateAxes(g2d);
-            return;
-        }
-
+        // Создаем проектор
         ProjectionTransformer projector;
         if (camera != null) {
             projector = new ProjectionTransformer(camera, scale, centerX, centerY);
-            zBuffer.setCamera(camera);
         } else {
-            // Старый режим
             projector = new ProjectionTransformer(projectionType, scale, centerX, centerY);
-            zBuffer.setCamera(null);
         }
 
-        zBuffer.renderPolyhedron(polyhedron, projector);
+        // Рендерим ВСЮ сцену
+        zBuffer.renderScene(scene, projector);
 
         zBuffer.display(g2d, getBackground());
-
-        // Рисуем координатные оси поверх z-буфера
         drawCoordinateAxes(g2d);
     }
 
@@ -239,6 +269,7 @@ public class GraphicsPanel extends JPanel {
                 (int) normalEnd2D.getX(), (int) normalEnd2D.getY());
     }
 
+    // TODO
     private Point2D projectPoint(Point3D point3d) {
         Point3D transformedPoint;
         if ("perspective".equals(projectionType) && camera != null) {
