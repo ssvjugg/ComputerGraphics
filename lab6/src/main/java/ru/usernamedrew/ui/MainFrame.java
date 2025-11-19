@@ -696,6 +696,7 @@ public class MainFrame extends JFrame {
         if (fileChooser.showSaveDialog(this) == JFileChooser.APPROVE_OPTION) {
             try {
                 PolyhedronIO.saveToFile(currentPolyhedron, fileChooser.getSelectedFile().getAbsolutePath());
+                graphicsPanel.requestFocusInWindow();
                 JOptionPane.showMessageDialog(this, "Модель успешно сохранена");
             } catch (IOException ex) {
                 JOptionPane.showMessageDialog(this, "Ошибка при сохранении: " + ex.getMessage());
@@ -714,6 +715,7 @@ public class MainFrame extends JFrame {
         if (fileChooser.showOpenDialog(this) == JFileChooser.APPROVE_OPTION) {
             try {
                 currentPolyhedron = PolyhedronIO.loadFromFile(fileChooser.getSelectedFile().getAbsolutePath());
+                graphicsPanel.requestFocusInWindow();
                 graphicsPanel.addPolyhedron(currentPolyhedron);
                 JOptionPane.showMessageDialog(this, "Модель успешно загружена");
             } catch (IOException ex) {
