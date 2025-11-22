@@ -59,10 +59,38 @@ public class MainFrame extends JFrame {
         // Вторая строка - основные управления
         JPanel basicControlPanel = createBasicControlPanel();
 
+        JPanel zBufferPanel = createZBufferControlPanel();
+
         mainPanel.add(revolutionPanel);
         mainPanel.add(basicControlPanel);
+        mainPanel.add(zBufferPanel);
 
         return mainPanel;
+    }
+
+    private JPanel createZBufferControlPanel() {
+        JPanel panel = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        panel.setPreferredSize(new Dimension(1000, 40));
+
+        // Кнопка включения/выключения z-буфера
+        JButton zBufferToggleBtn = new JButton("Включить Z-буфер");
+        zBufferToggleBtn.addActionListener(e -> toggleZBuffer(zBufferToggleBtn));
+        panel.add(zBufferToggleBtn);
+
+        return panel;
+    }
+
+    private void toggleZBuffer(JButton button) {
+        boolean currentlyEnabled = graphicsPanel.isZBufferEnabled();
+        graphicsPanel.setZBufferEnabled(!currentlyEnabled);
+
+        if (!currentlyEnabled) {
+            button.setText("Выключить Z-буфер");
+        } else {
+            button.setText("Включить Z-буфер");
+        }
+        graphicsPanel.requestFocusInWindow();
+        graphicsPanel.repaint();
     }
 
     private JPanel createBasicControlPanel() {
@@ -82,7 +110,7 @@ public class MainFrame extends JFrame {
                 case "Октаэдр" -> currentPolyhedron = RegularPolyhedra.createOctahedron();
             }
             currentPolyhedron.recalculateNormals();
-            graphicsPanel.setPolyhedron(currentPolyhedron);
+            graphicsPanel.addPolyhedron(currentPolyhedron);
             graphicsPanel.requestFocusInWindow();
         });
 
@@ -252,7 +280,7 @@ public class MainFrame extends JFrame {
             double[][] matrix = AffineTransform.createTranslationMatrix(dx, dy, dz);
             currentPolyhedron = currentPolyhedron.transform(matrix);
             currentPolyhedron.recalculateNormals();
-            graphicsPanel.setPolyhedron(currentPolyhedron);
+            graphicsPanel.updateActivePolyhedron(currentPolyhedron);
             graphicsPanel.requestFocusInWindow();
         } catch (NumberFormatException ex) {
             JOptionPane.showMessageDialog(this, "Неверный ввод!");
@@ -272,7 +300,7 @@ public class MainFrame extends JFrame {
 
             currentPolyhedron = currentPolyhedron.transform(transform);
             currentPolyhedron.recalculateNormals();
-            graphicsPanel.setPolyhedron(currentPolyhedron);
+            graphicsPanel.updateActivePolyhedron(currentPolyhedron);
             graphicsPanel.requestFocusInWindow();
         } catch (NumberFormatException ex) {
             JOptionPane.showMessageDialog(this, "Неверный ввод!");
@@ -325,7 +353,7 @@ public class MainFrame extends JFrame {
 
             currentPolyhedron = currentPolyhedron.transform(transform);
             currentPolyhedron.recalculateNormals();
-            graphicsPanel.setPolyhedron(currentPolyhedron);
+            graphicsPanel.updateActivePolyhedron(currentPolyhedron);
             graphicsPanel.requestFocusInWindow();
         } catch (NumberFormatException ex) {
             JOptionPane.showMessageDialog(this, "Неверный ввод!");
@@ -403,7 +431,7 @@ public class MainFrame extends JFrame {
         double[][] matrix = AffineTransform.createReflectionMatrix(planeCode);
         currentPolyhedron = currentPolyhedron.transform(matrix);
         currentPolyhedron.recalculateNormals();
-        graphicsPanel.setPolyhedron(currentPolyhedron);
+        graphicsPanel.updateActivePolyhedron(currentPolyhedron);
         graphicsPanel.requestFocusInWindow();
     }
 
@@ -440,7 +468,7 @@ public class MainFrame extends JFrame {
 
             currentPolyhedron = currentPolyhedron.transform(matrix);
             currentPolyhedron.recalculateNormals();
-            graphicsPanel.setPolyhedron(currentPolyhedron);
+            graphicsPanel.updateActivePolyhedron(currentPolyhedron);
             graphicsPanel.requestFocusInWindow();
         } catch (NumberFormatException ex) {
             JOptionPane.showMessageDialog(this, "Ошибка.");
@@ -503,7 +531,7 @@ public class MainFrame extends JFrame {
 
             currentPolyhedron = SurfaceFactory.createSurface(function, x0, x1, y0, y1, n, n);
             currentPolyhedron.recalculateNormals();
-            graphicsPanel.setPolyhedron(currentPolyhedron);
+            graphicsPanel.addPolyhedron(currentPolyhedron);
             graphicsPanel.requestFocusInWindow();
         } catch (NumberFormatException ex) {
             JOptionPane.showMessageDialog(this, "Ошибка");
@@ -519,8 +547,6 @@ public class MainFrame extends JFrame {
 
         return new Point3D(V.x() / length, V.y() / length, V.z() / length);
     }
-
-    // Добавляем в MainFrame.java новые методы и компоненты
 
     private JPanel createRevolutionControlPanel() {
         // Создает UI элементы:
@@ -605,7 +631,7 @@ public class MainFrame extends JFrame {
 
             currentPolyhedron = RevolutionSurfaceFactory.createRevolutionSurface(generatrix, axis, divisions);
             currentPolyhedron.recalculateNormals();
-            graphicsPanel.setPolyhedron(currentPolyhedron);
+            graphicsPanel.addPolyhedron(currentPolyhedron);
             graphicsPanel.requestFocusInWindow();
         } catch (NumberFormatException ex) {
             JOptionPane.showMessageDialog(this, "Неверный формат числа");
@@ -670,6 +696,7 @@ public class MainFrame extends JFrame {
         if (fileChooser.showSaveDialog(this) == JFileChooser.APPROVE_OPTION) {
             try {
                 PolyhedronIO.saveToFile(currentPolyhedron, fileChooser.getSelectedFile().getAbsolutePath());
+                graphicsPanel.requestFocusInWindow();
                 JOptionPane.showMessageDialog(this, "Модель успешно сохранена");
             } catch (IOException ex) {
                 JOptionPane.showMessageDialog(this, "Ошибка при сохранении: " + ex.getMessage());
@@ -688,7 +715,8 @@ public class MainFrame extends JFrame {
         if (fileChooser.showOpenDialog(this) == JFileChooser.APPROVE_OPTION) {
             try {
                 currentPolyhedron = PolyhedronIO.loadFromFile(fileChooser.getSelectedFile().getAbsolutePath());
-                graphicsPanel.setPolyhedron(currentPolyhedron);
+                graphicsPanel.requestFocusInWindow();
+                graphicsPanel.addPolyhedron(currentPolyhedron);
                 JOptionPane.showMessageDialog(this, "Модель успешно загружена");
             } catch (IOException ex) {
                 JOptionPane.showMessageDialog(this, "Ошибка при загрузке: " + ex.getMessage());
