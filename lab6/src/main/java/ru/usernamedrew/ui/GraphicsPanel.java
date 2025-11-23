@@ -24,6 +24,7 @@ public class GraphicsPanel extends JPanel {
     private boolean zBufferEnabled = false; // Флаг использования z-буфера
     private boolean backfaceCulling = true; // Флаг отсечения нелицевых граней
     //private Point3D viewVector = new Point3D(0, 0, -1); // Вектор обзора по умолчанию
+    private List<Light> lights = new ArrayList<>();
 
     private Camera camera;
 
@@ -213,8 +214,8 @@ public class GraphicsPanel extends JPanel {
         }
         zBuffer.clear();
         zBuffer.setCamera(camera);
+        zBuffer.setLights(lights); // Устанавливаем источники света
 
-        // Создаем проектор
         ProjectionTransformer projector;
         if (camera != null) {
             projector = new ProjectionTransformer(camera, scale, centerX, centerY);
@@ -222,11 +223,17 @@ public class GraphicsPanel extends JPanel {
             projector = new ProjectionTransformer(projectionType, scale, centerX, centerY);
         }
 
-        // Рендерим ВСЮ сцену
         zBuffer.renderScene(scene, projector);
-
         zBuffer.display(g2d, getBackground());
         drawCoordinateAxes(g2d);
+    }
+
+    public void setLights(List<Light> lights) {
+        this.lights = lights;
+        if (zBuffer != null) {
+            zBuffer.setLights(lights);
+        }
+        repaint();
     }
 
     // Проверка видимости грани
