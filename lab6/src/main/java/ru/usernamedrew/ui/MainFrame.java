@@ -210,7 +210,7 @@ public class MainFrame extends JFrame {
                 JOptionPane.showMessageDialog(dialog, "Неверный формат числа!");
             }
         });
-
+        graphicsPanel.requestFocusInWindow();
         dialog.add(applyBtn);
         dialog.setLocationRelativeTo(this);
         dialog.setVisible(true);
@@ -229,6 +229,7 @@ public class MainFrame extends JFrame {
             currentPolyhedron.setColor(newColor);
             graphicsPanel.updateActivePolyhedron(currentPolyhedron);
         }
+        graphicsPanel.requestFocusInWindow();
     }
 
     private JPanel createZBufferControlPanel() {
