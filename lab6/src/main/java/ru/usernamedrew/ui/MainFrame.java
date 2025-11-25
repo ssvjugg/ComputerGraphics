@@ -13,6 +13,8 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Objects;
 import java.util.function.BiFunction;
+import java.util.List; // Добавьте этот импорт
+import java.util.ArrayList; // И этот
 
 public class MainFrame extends JFrame {
     private GraphicsPanel graphicsPanel;
@@ -53,24 +55,186 @@ public class MainFrame extends JFrame {
         JPanel mainPanel = new JPanel();
         mainPanel.setLayout(new BoxLayout(mainPanel, BoxLayout.Y_AXIS));
 
-        // Первая строка - фигуры вращения
+        // Создаем панель с вкладками
+        JTabbedPane tabbedPane = new JTabbedPane();
+
+        // Вкладка 1: Основные объекты
+        JPanel objectsTab = new JPanel();
+        objectsTab.setLayout(new BoxLayout(objectsTab, BoxLayout.Y_AXIS));
+
         JPanel revolutionPanel = createRevolutionControlPanel();
-
-        // Вторая строка - основные управления
         JPanel basicControlPanel = createBasicControlPanel();
+        JPanel zBufferPanel = createZBufferControlPanel(); // ДОБАВЬТЕ ЭТУ СТРОКУ
 
-        JPanel zBufferPanel = createZBufferControlPanel();
+        objectsTab.add(revolutionPanel);
+        objectsTab.add(basicControlPanel);
+        objectsTab.add(zBufferPanel); // ДОБАВЬТЕ ЭТУ СТРОКУ
 
-        mainPanel.add(revolutionPanel);
-        mainPanel.add(basicControlPanel);
-        mainPanel.add(zBufferPanel);
+        // Вкладка 2: Преобразования и камера
+        JPanel transformTab = new JPanel();
+        transformTab.setLayout(new BoxLayout(transformTab, BoxLayout.Y_AXIS));
 
+        JPanel transformPanel = createTransformControlPanel();
+        JPanel cameraPanel = createCameraControlPanel();
+
+        transformTab.add(transformPanel);
+        transformTab.add(cameraPanel);
+
+        // Вкладка 3: Освещение
+        JPanel lightingTab = new JPanel();
+        lightingTab.setLayout(new BoxLayout(lightingTab, BoxLayout.Y_AXIS));
+        JPanel lightingPanel = createLightingControlPanel();
+        lightingTab.add(lightingPanel);
+
+        tabbedPane.addTab("Объекты", objectsTab);
+        tabbedPane.addTab("Преобразования", transformTab);
+        tabbedPane.addTab("Освещение", lightingTab);
+
+        mainPanel.add(tabbedPane);
         return mainPanel;
+    }
+
+    private JPanel createTransformControlPanel() {
+        JPanel panel = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        panel.setPreferredSize(new Dimension(800, 40));
+
+        JButton translateBtn = new JButton("Смещение");
+        translateBtn.addActionListener(this::handleTranslation);
+
+        JButton scaleBtn = new JButton("Масштабирование(центр)");
+        scaleBtn.addActionListener(this::handleScalingCenter);
+
+        JButton scaleOriginBtn = new JButton("Масштабирование(начало)");
+        scaleOriginBtn.addActionListener(this::handleScalingOrigin);
+
+        JButton rotateBtn = new JButton("Вращение");
+        rotateBtn.addActionListener(this::handleRotation);
+
+        JButton ownAxisRotateBtn = new JButton("Вращение вокруг своей оси");
+        ownAxisRotateBtn.addActionListener(this::handleRotationAroundOwnAxis);
+
+        JButton reflectBtn = new JButton("Отражение");
+        reflectBtn.addActionListener(this::handleReflection);
+
+        JButton arbitraryRotateBtn = new JButton("Вращение по произвольной оси");
+        arbitraryRotateBtn.addActionListener(this::handleArbitraryRotation);
+
+        panel.add(translateBtn);
+        panel.add(scaleBtn);
+        panel.add(scaleOriginBtn);
+        panel.add(rotateBtn);
+        panel.add(ownAxisRotateBtn);
+        panel.add(reflectBtn);
+        panel.add(arbitraryRotateBtn);
+
+        return panel;
+    }
+
+    private JPanel createCameraControlPanel() {
+        JPanel panel = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        panel.setPreferredSize(new Dimension(800, 40));
+
+        JButton cameraModeBtn = new JButton("Режим камеры");
+        cameraModeBtn.addActionListener(e -> toggleCameraMode());
+
+        // Чекбокс для отсечения граней
+        JCheckBox backfaceCullingCheckbox = new JCheckBox("Отсечение нелицевых граней", true);
+        backfaceCullingCheckbox.addActionListener(e -> {
+            graphicsPanel.setBackfaceCulling(backfaceCullingCheckbox.isSelected());
+            graphicsPanel.requestFocusInWindow();
+        });
+
+        panel.add(cameraModeBtn);
+        panel.add(backfaceCullingCheckbox);
+
+        return panel;
+    }
+
+    // Создаем панель управления освещением
+    private JPanel createLightingControlPanel() {
+        JPanel panel = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        panel.setPreferredSize(new Dimension(1000, 40));
+
+        JButton lightingBtn = new JButton("Управление освещением");
+        lightingBtn.addActionListener(e -> showLightingDialog());
+        panel.add(lightingBtn);
+
+        JButton colorBtn = new JButton("Цвет объекта");
+        colorBtn.addActionListener(e -> chooseObjectColor());
+        panel.add(colorBtn);
+
+        return panel;
+    }
+
+    private void showLightingDialog() {
+        JDialog dialog = new JDialog(this, "Управление освещением", true);
+        dialog.setLayout(new GridLayout(0, 2, 5, 5));
+        dialog.setSize(400, 200);
+
+        JTextField dirX = new JTextField("1");
+        JTextField dirY = new JTextField("1");
+        JTextField dirZ = new JTextField("-1");
+        JTextField dirIntensity = new JTextField("0.7");
+        JTextField ambIntensity = new JTextField("0.3");
+
+        dialog.add(new JLabel("Направленный свет (X,Y,Z):"));
+        JPanel dirPanel = new JPanel(new FlowLayout());
+        dirPanel.add(dirX); dirPanel.add(dirY); dirPanel.add(dirZ);
+        dialog.add(dirPanel);
+
+        dialog.add(new JLabel("Интенсивность направленного:"));
+        dialog.add(dirIntensity);
+
+        dialog.add(new JLabel("Интенсивность окружающего:"));
+        dialog.add(ambIntensity);
+
+        JButton applyBtn = new JButton("Применить");
+        applyBtn.addActionListener(e -> {
+            try {
+                Point3D lightDir = new Point3D(
+                        Double.parseDouble(dirX.getText()),
+                        Double.parseDouble(dirY.getText()),
+                        Double.parseDouble(dirZ.getText())
+                ).normalize();
+
+                // Используем полное имя java.util.List
+                java.util.List<Light> lights = new java.util.ArrayList<>();
+                lights.add(new Light(new Color(255, 255, 255),
+                        Double.parseDouble(ambIntensity.getText())));
+                lights.add(new Light(lightDir, new Color(255, 255, 255),
+                        Double.parseDouble(dirIntensity.getText())));
+
+                graphicsPanel.setLights(lights);
+                dialog.dispose();
+            } catch (NumberFormatException ex) {
+                JOptionPane.showMessageDialog(dialog, "Неверный формат числа!");
+            }
+        });
+        graphicsPanel.requestFocusInWindow();
+        dialog.add(applyBtn);
+        dialog.setLocationRelativeTo(this);
+        dialog.setVisible(true);
+    }
+
+    private void chooseObjectColor() {
+        if (currentPolyhedron == null) {
+            JOptionPane.showMessageDialog(this, "Сначала выберите объект!");
+            return;
+        }
+
+        Color newColor = JColorChooser.showDialog(this, "Выберите цвет объекта",
+                currentPolyhedron.getColor());
+
+        if (newColor != null) {
+            currentPolyhedron.setColor(newColor);
+            graphicsPanel.updateActivePolyhedron(currentPolyhedron);
+        }
+        graphicsPanel.requestFocusInWindow();
     }
 
     private JPanel createZBufferControlPanel() {
         JPanel panel = new JPanel(new FlowLayout(FlowLayout.LEFT));
-        panel.setPreferredSize(new Dimension(1000, 40));
+        panel.setPreferredSize(new Dimension(800, 40));
 
         // Кнопка включения/выключения z-буфера
         JButton zBufferToggleBtn = new JButton("Включить Z-буфер");
@@ -95,13 +259,12 @@ public class MainFrame extends JFrame {
 
     private JPanel createBasicControlPanel() {
         JPanel panel = new JPanel(new FlowLayout(FlowLayout.LEFT));
-        panel.setPreferredSize(new Dimension(1000, 100));
+        panel.setPreferredSize(new Dimension(800, 40));
 
-        // Выбор многогранника
+        // Только самые основные элементы
         JComboBox<String> polyhedronCombo = new JComboBox<>(new String[]{
                 "Тетраэдр", "Гексаэдр", "Октаэдр"
         });
-
         polyhedronCombo.addActionListener(e -> {
             String selected = (String) polyhedronCombo.getSelectedItem();
             switch (selected) {
@@ -114,70 +277,21 @@ public class MainFrame extends JFrame {
             graphicsPanel.requestFocusInWindow();
         });
 
-        // Выбор проекции
         JComboBox<String> projectionCombo = new JComboBox<>(new String[]{
                 "Аксонометрическая", "Перспективная"
         });
-
         projectionCombo.addActionListener(e -> {
             String selected = (String) projectionCombo.getSelectedItem();
             if (selected != null) {
                 String projectionType = selected.equals("Аксонометрическая") ? "axonometric" : "perspective";
-                graphicsPanel.requestFocusInWindow();
                 graphicsPanel.setProjectionType(projectionType);
             }
         });
 
-        // Кнопки преобразований
-        JButton translateBtn = new JButton("Смещение");
-        translateBtn.addActionListener(this::handleTranslation);
-
-        JButton scaleBtn = new JButton("Масштабирование(центр)");
-        scaleBtn.addActionListener(this::handleScalingCenter);
-
-        JButton scaleOriginBtn = new JButton("Масштабирование(начало)");
-        scaleOriginBtn.addActionListener(this::handleScalingOrigin);
-
-        JButton rotateBtn = new JButton("Вращение");
-        rotateBtn.addActionListener(this::handleRotation);
-
-        JButton ownAxisRotateBtn = new JButton("Вращение вокруг своей оси");
-        ownAxisRotateBtn.addActionListener(this::handleRotationAroundOwnAxis);
-
-        JButton reflectBtn = new JButton("Отражение");
-        reflectBtn.addActionListener(this::handleReflection);
-
-        JButton arbitraryRotateBtn = new JButton("Вращение по произвольной оси");
-        arbitraryRotateBtn.addActionListener(this::handleArbitraryRotation);
-
-        JPanel surfacePanel = createSurfaceControlPanel();
-
-        // Добавляем компоненты
-        panel.add(new JLabel("Многогранник:"));
+        panel.add(new JLabel("Фигура:"));
         panel.add(polyhedronCombo);
         panel.add(new JLabel("Проекция:"));
         panel.add(projectionCombo);
-        panel.add(translateBtn);
-        panel.add(scaleBtn);
-        panel.add(scaleOriginBtn);
-        panel.add(rotateBtn);
-        panel.add(ownAxisRotateBtn);
-        panel.add(reflectBtn);
-        panel.add(arbitraryRotateBtn);
-        panel.add(surfacePanel);
-
-        // Чекбокс для включения/отключения отсечения граней
-        JCheckBox backfaceCullingCheckbox = new JCheckBox("Отсечение нелицевых граней", true);
-        backfaceCullingCheckbox.addActionListener(e -> {
-            graphicsPanel.setBackfaceCulling(backfaceCullingCheckbox.isSelected());
-            graphicsPanel.requestFocusInWindow();
-        });
-
-        panel.add(backfaceCullingCheckbox);
-
-        JButton cameraModeBtn = new JButton("Режим камеры");
-        cameraModeBtn.addActionListener(e -> toggleCameraMode());
-        panel.add(cameraModeBtn);
 
         return panel;
     }

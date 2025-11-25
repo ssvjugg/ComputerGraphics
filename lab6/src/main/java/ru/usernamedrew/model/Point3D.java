@@ -21,6 +21,11 @@ public record Point3D(double x, double y, double z) {
         return new Point3D(xNew, yNew, zNew);
     }
 
+    public Point3D reflect(Point3D normal) {
+        double dot = this.dot(normal);
+        return this.subtract(normal.multiply(2 * dot));
+    }
+
     public Point3D subtract(Point3D other) {
         return new Point3D(x - other.x, y - other.y, z - other.z);
     }
