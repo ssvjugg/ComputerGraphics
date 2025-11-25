@@ -8,19 +8,33 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class ZBuffer {
+    // Перечисление режимов закрашивания
+    public enum ShadingMode {
+        DEFAULT,        // Фонг + Блинн-Фонг
+        GOURAUD_LAMBERT, // Гуро + Ламберт
+        PHONG_TOON      // Фонг + Тун-шейдинг
+    }
+
     private double[][] zBuffer;
     private Color[][] frameBuffer;
-    private int width, height;
+    private final int width;
+    private final int height;
 
     private Camera camera = null;
     private List<Light> lights = new ArrayList<>();
     private Color ambientLight = new Color(50, 50, 50);
+
+    private ShadingMode currentShadingMode = ShadingMode.DEFAULT;
 
     public ZBuffer(int width, int height) {
         this.width = width;
         this.height = height;
         initializeBuffers();
         setupDefaultLighting();
+    }
+
+    public void setShadingMode(ShadingMode mode) {
+        this.currentShadingMode = mode;
     }
 
     private void setupDefaultLighting() {
@@ -71,7 +85,14 @@ public class ZBuffer {
                     -v.transform(camera.getViewMatrix()).z() : -v.z();
 
             Point3D normal = polyhedron.getVertexNormal(v);
-            vertexData[i] = new VertexData(p2d.getX(), p2d.getY(), depth, normal, v);
+
+            //Для Гуро вычисляем цвет заранее в каждой вершине
+            Color vertexColor = null;
+            if (currentShadingMode == ShadingMode.GOURAUD_LAMBERT) {
+                vertexColor = calculateLambertVertexColor(polyhedron.getColor(), normal, v);
+            }
+
+            vertexData[i] = new VertexData(p2d.getX(), p2d.getY(), depth, normal, v, vertexColor);
         }
 
         for (int i = 1; i < vertices.size() - 1; i++) {
@@ -91,15 +112,126 @@ public class ZBuffer {
                 if (bary.x() >= 0 && bary.y() >= 0 && bary.z() >= 0) {
                     double depth = bary.x() * v1.z + bary.y() * v2.z + bary.z() * v3.z;
                     if (depth < zBuffer[x][y]) {
-                        Point3D normal = interpolateNormal(v1, v2, v3, bary);
-                        Point3D position = interpolatePosition(v1, v2, v3, bary);
-                        Color shadedColor = calculateLighting(baseColor, normal, position);
+                        Color finalColor;
+
+                        if (currentShadingMode == ShadingMode.GOURAUD_LAMBERT) {
+                            // Интерполяция уже вычисленного цвета (Гуро)
+                            finalColor = interpolateColor(v1.color, v2.color, v3.color, bary);
+                        } else {
+                            // Интерполяция атрибутов для попиксельного освещения
+                            Point3D normal = interpolateNormal(v1, v2, v3, bary);
+                            Point3D position = interpolatePosition(v1, v2, v3, bary);
+
+                            if (currentShadingMode == ShadingMode.PHONG_TOON) {
+                                // Тун-шейдинг на основе интерполированной нормали (Фонг)
+                                finalColor = calculateToonPixelColor(baseColor, normal, position);
+                            } else {
+                                // Стандартный (существующий) метод
+                                finalColor = calculateLighting(baseColor, normal, position);
+                            }
+                        }
+
                         zBuffer[x][y] = depth;
-                        frameBuffer[x][y] = shadedColor;
+                        frameBuffer[x][y] = finalColor;
                     }
                 }
             }
         }
+    }
+
+    // Расчет цвета вершины по модели Ламберта (Diff = N * L)
+    private Color calculateLambertVertexColor(Color baseColor, Point3D normal, Point3D position) {
+        double red = ambientLight.getRed() * baseColor.getRed() / 255.0 / 255.0;
+        double green = ambientLight.getGreen() * baseColor.getGreen() / 255.0 / 255.0;
+        double blue = ambientLight.getBlue() * baseColor.getBlue() / 255.0 / 255.0;
+
+        for (Light light : lights) {
+            Point3D lightDir;
+            double attenuation = 1.0;
+
+            if (light.getType() == Light.LightType.DIRECTIONAL) {
+                lightDir = light.getDirection().multiply(-1);
+            } else if (light.getType() == Light.LightType.POINT) {
+                lightDir = light.getPosition().subtract(position).normalize();
+                double distance = light.getPosition().distanceTo(position);
+                attenuation = 1.0 / (1.0 + 0.05 * distance); // Небольшое затухание
+            } else {
+                continue;
+            }
+
+            // Только диффузная составляющая (Ламберт)
+            double diff = Math.max(normal.dot(lightDir), 0.0);
+
+            red += diff * light.getIntensity() * light.getColor().getRed() * baseColor.getRed() / 65025.0 * attenuation;
+            green += diff * light.getIntensity() * light.getColor().getGreen() * baseColor.getGreen() / 65025.0 * attenuation;
+            blue += diff * light.getIntensity() * light.getColor().getBlue() * baseColor.getBlue() / 65025.0 * attenuation;
+        }
+
+        return clampColor(red, green, blue);
+    }
+
+    // Билинейная (барицентрическая) интерполяция цвета
+    private Color interpolateColor(Color c1, Color c2, Color c3, Point3D bary) {
+        int r = (int)(c1.getRed() * bary.x() + c2.getRed() * bary.y() + c3.getRed() * bary.z());
+        int g = (int)(c1.getGreen() * bary.x() + c2.getGreen() * bary.y() + c3.getGreen() * bary.z());
+        int b = (int)(c1.getBlue() * bary.x() + c2.getBlue() * bary.y() + c3.getBlue() * bary.z());
+
+        // Clamping на всякий случай
+        r = Math.max(0, Math.min(255, r));
+        g = Math.max(0, Math.min(255, g));
+        b = Math.max(0, Math.min(255, b));
+
+        return new Color(r, g, b);
+    }
+
+    //Фонг + Тун-шейдинг
+    private Color calculateToonPixelColor(Color baseColor, Point3D normal, Point3D position) {
+        // Базовый цвет (окружающий)
+        double intensity = 0.2; // Минимум света (тень)
+
+        // Находим самый сильный источник света для расчета "ступенек"
+        // (Тун-шейдинг обычно работает с основным направленным светом)
+        for (Light light : lights) {
+            if (light.getType() == Light.LightType.AMBIENT) continue;
+
+            Point3D lightDir;
+            if (light.getType() == Light.LightType.DIRECTIONAL) {
+                lightDir = light.getDirection().multiply(-1);
+            } else {
+                lightDir = light.getPosition().subtract(position).normalize();
+            }
+
+            // Cos угла падения
+            double dot = Math.max(normal.dot(lightDir), 0.0);
+
+            // Квантование (ступенчатая функция)
+            if (dot > 0.95) intensity += 0.8;      // Яркий блик
+            else if (dot > 0.5) intensity += 0.5;  // Освещенная часть
+            else if (dot > 0.25) intensity += 0.3; // Полутень
+            // иначе остается в глубокой тени
+        }
+
+        // Ограничиваем интенсивность 1.0
+        intensity = Math.min(1.0, intensity);
+
+        int r = (int)(baseColor.getRed() * intensity);
+        int g = (int)(baseColor.getGreen() * intensity);
+        int b = (int)(baseColor.getBlue() * intensity);
+
+        return new Color(
+                Math.max(0, Math.min(255, r)),
+                Math.max(0, Math.min(255, g)),
+                Math.max(0, Math.min(255, b))
+        );
+    }
+
+    // Вспомогательный метод для ограничения цвета
+    private Color clampColor(double r, double g, double b) {
+        return new Color(
+                (int) Math.min(255, Math.max(0, r * 255)),
+                (int) Math.min(255, Math.max(0, g * 255)),
+                (int) Math.min(255, Math.max(0, b * 255))
+        );
     }
 
     private Point3D barycentric(VertexData A, VertexData B, VertexData C, Point2D P) {
@@ -214,13 +346,19 @@ public class ZBuffer {
         double x, y, z;
         Point3D normal;
         Point3D position;
+        Color color;
 
         VertexData(double x, double y, double z, Point3D normal, Point3D position) {
+            this(x, y, z, normal, position, null);
+        }
+
+        VertexData(double x, double y, double z, Point3D normal, Point3D position,  Color color) {
             this.x = x;
             this.y = y;
             this.z = z;
             this.normal = normal;
             this.position = position;
+            this.color = color;
         }
     }
 }

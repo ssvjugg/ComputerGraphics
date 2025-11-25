@@ -108,6 +108,13 @@ public class GraphicsPanel extends JPanel {
         repaint();
     }
 
+    public void setShadingMode(ZBuffer.ShadingMode mode) {
+        if (zBuffer != null) {
+            zBuffer.setShadingMode(mode);
+            repaint();
+        }
+    }
+
     @Override
     protected void paintComponent(Graphics g) {
         super.paintComponent(g);
