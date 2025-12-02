@@ -4,6 +4,7 @@ import ru.usernamedrew.controller.CameraController;
 import ru.usernamedrew.model.*;
 import ru.usernamedrew.util.AffineTransform;
 import ru.usernamedrew.util.PolyhedronIO;
+import ru.usernamedrew.util.ZBuffer;
 
 import javax.swing.*;
 import java.awt.*;
@@ -162,6 +163,29 @@ public class MainFrame extends JFrame {
         JButton colorBtn = new JButton("Цвет объекта");
         colorBtn.addActionListener(e -> chooseObjectColor());
         panel.add(colorBtn);
+
+        JComboBox<String> shadingCombo = new JComboBox<>(new String[]{
+                "Фонг + Блинн-Фонг",
+                "Гуро + Ламберт",
+                "Фонг + Тун-шейдинг"
+        });
+
+        shadingCombo.addActionListener(e -> {
+            String selected = (String) shadingCombo.getSelectedItem();
+            ZBuffer.ShadingMode mode = switch (selected) {
+                case "Гуро + Ламберт" -> ZBuffer.ShadingMode.GOURAUD_LAMBERT;
+                case "Фонг + Тун-шейдинг" -> ZBuffer.ShadingMode.PHONG_TOON;
+                default -> ZBuffer.ShadingMode.DEFAULT;
+            };
+            // Нужно убедиться, что Z-буфер включен, иначе эффекта не будет видно
+            if (!graphicsPanel.isZBufferEnabled()) {
+                JOptionPane.showMessageDialog(this, "Включите Z-буфер для просмотра шейдинга!");
+            }
+            graphicsPanel.setShadingMode(mode);
+        });
+
+        panel.add(new JLabel("Режим:"));
+        panel.add(shadingCombo);
 
         return panel;
     }
