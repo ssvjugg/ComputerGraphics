@@ -6,46 +6,58 @@
 #include <cmath>
 #include <optional>
 
+// Отключаем предупреждения macOS
 #define GL_SILENCE_DEPRECATION
 
 // --- Глобальные переменные ---
 GLuint Program;
-GLint Attrib_vertex;
-GLint Unif_colorType;
+GLint Attrib_coord;   // Атрибут координат
+GLint Attrib_color;   // Атрибут цвета (для градиента)
+GLint Unif_flatColor; // Uniform для плоского цвета
+GLint Unif_useGradient; // Переключатель режимов
 
-// Используем только VBO (буферы данных), VAO будем игнорировать для надежности
 GLuint VBO_quad, VBO_fan, VBO_pentagon;
-
-// Счетчики вершин
 int quad_vertex_count = 0;
 int fan_vertex_count = 0;
 int pentagon_vertex_count = 0;
 
 struct Vertex {
-    GLfloat x;
-    GLfloat y;
+    GLfloat x, y;       // Позиция
+    GLfloat r, g, b;    // Цвет вершины
 };
 
 // --- ШЕЙДЕРЫ ---
+
+// Вершинный шейдер
 const char* VertexShaderSource = R"(
 #version 120
-attribute vec2 coord;
+attribute vec2 coord;   // Координаты вершины
+attribute vec3 color;   // Цвет вершины
+
+// 'varying' означает, что эта переменная будет ИНТЕРПОЛИРОВАТЬСЯ
+// между вершинами при передаче во фрагментный шейдер.
+varying vec3 vColor;
+
 void main() {
-   // Применяем матрицу проекции и модели
    gl_Position = gl_ModelViewProjectionMatrix * vec4(coord, 0.0, 1.0);
+   vColor = color;      // Передаем цвет для интерполяции
 }
 )";
 
+// Фрагментный шейдер
 const char* FragShaderSource = R"(
 #version 120
-uniform int figureType;
+varying vec3 vColor;       // Сюда приходит уже смешанный (интерполированный) цвет
+uniform vec4 flatColor;    // Цвет для режима плоской заливки
+uniform int useGradient;   // Переключатель
+
 void main() {
-    if (figureType == 0) {
-        gl_FragColor = vec4(1.0, 0.0, 0.0, 1.0); // 0: Красный
-    } else if (figureType == 1) {
-        gl_FragColor = vec4(0.0, 1.0, 0.0, 1.0); // 1: Зеленый
+    if (useGradient == 1) {
+        // Градиент: используем интерполированный цвет вершин
+        gl_FragColor = vec4(vColor, 1.0);
     } else {
-        gl_FragColor = vec4(0.0, 0.0, 1.0, 1.0); // 2: Синий
+        // Плоский: используем общий цвет
+        gl_FragColor = flatColor;
     }
 }
 )";
@@ -55,29 +67,39 @@ void InitShader() {
     glShaderSource(vShader, 1, &VertexShaderSource, NULL);
     glCompileShader(vShader);
 
+    // Проверка ошибок (упрощенная)
+    GLint success;
+    glGetShaderiv(vShader, GL_COMPILE_STATUS, &success);
+    if(!success) std::cerr << "Vertex Shader Error" << std::endl;
+
     GLuint fShader = glCreateShader(GL_FRAGMENT_SHADER);
     glShaderSource(fShader, 1, &FragShaderSource, NULL);
     glCompileShader(fShader);
+    glGetShaderiv(fShader, GL_COMPILE_STATUS, &success);
+    if(!success) std::cerr << "Fragment Shader Error" << std::endl;
 
     Program = glCreateProgram();
     glAttachShader(Program, vShader);
     glAttachShader(Program, fShader);
     glLinkProgram(Program);
 
-    Attrib_vertex = glGetAttribLocation(Program, "coord");
-    Unif_colorType = glGetUniformLocation(Program, "figureType");
+    Attrib_coord = glGetAttribLocation(Program, "coord");
+    Attrib_color = glGetAttribLocation(Program, "color");
+    Unif_flatColor = glGetUniformLocation(Program, "flatColor");
+    Unif_useGradient = glGetUniformLocation(Program, "useGradient");
 
     glDeleteShader(vShader);
     glDeleteShader(fShader);
 }
 
-// 1. Создаем данные Квадрата
+// 1. КВАДРАТ: Каждая из 4 вершин имеет свой уникальный цвет
 void InitQuadData() {
     std::vector<Vertex> vertices = {
-        { -0.5f,  0.5f },
-        { -0.5f, -0.5f },
-        {  0.5f, -0.5f },
-        {  0.5f,  0.5f }
+        // Координаты (X, Y) | Цвет (R, G, B)
+        { -0.5f,  0.5f,        1.0f, 0.0f, 0.0f }, // Верх-Лево: Красный
+        { -0.5f, -0.5f,        0.0f, 1.0f, 0.0f }, // Низ-Лево:  Зеленый
+        {  0.5f, -0.5f,        0.0f, 0.0f, 1.0f }, // Низ-Право: Синий
+        {  0.5f,  0.5f,        1.0f, 1.0f, 0.0f }  // Верх-Право: Желтый
     };
     quad_vertex_count = vertices.size();
 
@@ -87,21 +109,29 @@ void InitQuadData() {
     glBindBuffer(GL_ARRAY_BUFFER, 0);
 }
 
-// 2. Создаем данные Веера (Полукруг)
+// 2. ВЕЕР: Центр белый, крайние точки меняют цвет вдоль дуги
 void InitFanData() {
     std::vector<Vertex> vertices;
-    vertices.push_back({0.0f, -0.5f}); // Центр внизу
 
-    // Генерируем 30 сегментов (очень гладкий полукруг)
+    // ЦЕНТР веера - Белый (1, 1, 1)
+    vertices.push_back({0.0f, -0.5f,  1.0f, 1.0f, 1.0f});
+
     int segments = 30;
     float radius = 0.8f;
 
-    // От 0 до 180 градусов (PI)
     for (int i = 0; i <= segments; i++) {
         float angle = M_PI * i / segments;
+
+        // Вычисляем цвет в зависимости от угла, чтобы каждая вершина была уникальной
+        // t идет от 0.0 до 1.0
+        float t = (float)i / segments;
+
         vertices.push_back({
-            radius * cos(angle),
-            radius * sin(angle) - 0.5f
+            radius * cos(angle),        // X
+            radius * sin(angle) - 0.5f, // Y
+            t,              // Red компонент растет
+            1.0f - t,       // Green компонент падает
+            0.5f            // Blue фиксированный
         });
     }
     fan_vertex_count = vertices.size();
@@ -112,20 +142,32 @@ void InitFanData() {
     glBindBuffer(GL_ARRAY_BUFFER, 0);
 }
 
-// 3. Создаем данные Пятиугольника
+// 3. ПЯТИУГОЛЬНИК: Центр серый, вершины разноцветные
 void InitPentagonData() {
     std::vector<Vertex> vertices;
-    vertices.push_back({0.0f, 0.0f}); // Центр
+
+    // ЦЕНТР - Темно-серый
+    vertices.push_back({0.0f, 0.0f, 0.3f, 0.3f, 0.3f});
 
     int sides = 5;
     float radius = 0.5f;
 
-    // Полный круг (2*PI), деленный на 5
+    // Цвета для 5 вершин + 1 замыкающая
+    float colors[6][3] = {
+        {1.0f, 0.0f, 0.0f}, // Красный
+        {0.0f, 1.0f, 1.0f}, // Циан
+        {1.0f, 0.0f, 1.0f}, // Пурпурный
+        {1.0f, 1.0f, 0.0f}, // Желтый
+        {0.0f, 1.0f, 0.0f}, // Зеленый
+        {1.0f, 0.0f, 0.0f}  // Красный (чтобы замкнуть градиент плавно)
+    };
+
     for (int i = 0; i <= sides; i++) {
         float angle = 2.0f * M_PI * i / sides + M_PI / 2.0f;
         vertices.push_back({
             radius * cos(angle),
-            radius * sin(angle)
+            radius * sin(angle),
+            colors[i][0], colors[i][1], colors[i][2]
         });
     }
     pentagon_vertex_count = vertices.size();
@@ -151,14 +193,12 @@ void Release() {
 }
 
 int main() {
-    std::cout << "--- ЗАПУСК ВЕРСИИ С ЯВНОЙ ПРИВЯЗКОЙ (FIX) ---" << std::endl;
-
     sf::ContextSettings settings;
     settings.depthBits = 24;
     settings.majorVersion = 2;
     settings.minorVersion = 1;
 
-    sf::Window window(sf::VideoMode({800, 600}), "Fixed Shapes", sf::State::Windowed, settings);
+    sf::Window window(sf::VideoMode({800, 600}), "Final Gradient Task", sf::State::Windowed, settings);
     window.setVerticalSyncEnabled(true);
     window.setActive(true);
 
@@ -174,11 +214,20 @@ int main() {
 
     glMatrixMode(GL_MODELVIEW);
 
+    bool useGradientMode = false; // По умолчанию плоское закрашивание
+    std::cout << "Нажмите PROBEL (SPACE) для переключения режимов закраски." << std::endl;
+
     while (window.isOpen()) {
         while (std::optional<sf::Event> event = window.pollEvent()) {
             if (event->is<sf::Event::Closed>()) window.close();
             else if (const sf::Event::Resized* resized = event->getIf<sf::Event::Resized>()) {
                 glViewport(0, 0, resized->size.x, resized->size.y);
+            }
+            else if (const sf::Event::KeyPressed* key = event->getIf<sf::Event::KeyPressed>()) {
+                if (key->code == sf::Keyboard::Key::Space) {
+                    useGradientMode = !useGradientMode;
+                    std::cout << "Режим: " << (useGradientMode ? "ГРАДИЕНТ (Разные цвета вершин)" : "ПЛОСКИЙ (Uniform)") << std::endl;
+                }
             }
         }
 
@@ -186,42 +235,49 @@ int main() {
         glClear(GL_COLOR_BUFFER_BIT);
 
         glUseProgram(Program);
-        glEnableVertexAttribArray(Attrib_vertex);
+        glEnableVertexAttribArray(Attrib_coord);
+        glEnableVertexAttribArray(Attrib_color);
 
-        // --- 1. КВАДРАТ (Красный) ---
+        // Передаем флаг режима в шейдер
+        glUniform1i(Unif_useGradient, useGradientMode ? 1 : 0);
+
+        // --- 1. КВАДРАТ ---
         glLoadIdentity();
         glTranslatef(-1.5f, 0.0f, 0.0f);
-        glUniform1i(Unif_colorType, 0);
+        // Цвет для плоского режима (Красный)
+        glUniform4f(Unif_flatColor, 1.0f, 0.0f, 0.0f, 1.0f);
 
-        // ЯВНАЯ ПРИВЯЗКА: Подключаем буфер квадрата прямо перед рисованием
         glBindBuffer(GL_ARRAY_BUFFER, VBO_quad);
-        glVertexAttribPointer(Attrib_vertex, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)0);
+        // Смещение 0 для координат, смещение 8 байт (2 float) для цвета
+        glVertexAttribPointer(Attrib_coord, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)0);
+        glVertexAttribPointer(Attrib_color, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)(2 * sizeof(GLfloat)));
         glDrawArrays(GL_TRIANGLE_FAN, 0, quad_vertex_count);
 
-        // --- 2. ВЕЕР (Зеленый) ---
+        // --- 2. ВЕЕР ---
         glLoadIdentity();
         glTranslatef(0.0f, 0.0f, 0.0f);
-        glUniform1i(Unif_colorType, 1);
+        // Цвет для плоского режима (Зеленый)
+        glUniform4f(Unif_flatColor, 0.0f, 1.0f, 0.0f, 1.0f);
 
-        // Подключаем буфер веера
         glBindBuffer(GL_ARRAY_BUFFER, VBO_fan);
-        // Заново говорим OpenGL, где брать данные
-        glVertexAttribPointer(Attrib_vertex, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)0);
-        // Рисуем (теперь точно возьмет данные из VBO_fan)
+        glVertexAttribPointer(Attrib_coord, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)0);
+        glVertexAttribPointer(Attrib_color, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)(2 * sizeof(GLfloat)));
         glDrawArrays(GL_TRIANGLE_FAN, 0, fan_vertex_count);
 
-        // --- 3. ПЯТИУГОЛЬНИК (Синий) ---
+        // --- 3. ПЯТИУГОЛЬНИК ---
         glLoadIdentity();
         glTranslatef(1.5f, 0.0f, 0.0f);
-        glUniform1i(Unif_colorType, 2);
+        // Цвет для плоского режима (Синий)
+        glUniform4f(Unif_flatColor, 0.0f, 0.0f, 1.0f, 1.0f);
 
-        // Подключаем буфер пятиугольника
         glBindBuffer(GL_ARRAY_BUFFER, VBO_pentagon);
-        glVertexAttribPointer(Attrib_vertex, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)0);
+        glVertexAttribPointer(Attrib_coord, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)0);
+        glVertexAttribPointer(Attrib_color, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)(2 * sizeof(GLfloat)));
         glDrawArrays(GL_TRIANGLE_FAN, 0, pentagon_vertex_count);
 
-        // Отключаем
         glBindBuffer(GL_ARRAY_BUFFER, 0);
+        glDisableVertexAttribArray(Attrib_coord);
+        glDisableVertexAttribArray(Attrib_color);
         glUseProgram(0);
 
         window.display();
