@@ -1,168 +1,232 @@
 #include <GL/glew.h>
-
-#include <SFML/OpenGL.hpp>
+#include <SFML/Window.hpp>
 #include <SFML/Graphics.hpp>
 #include <iostream>
 #include <vector>
+#include <cmath>
+#include <optional>
 
+#define GL_SILENCE_DEPRECATION
+
+// --- Глобальные переменные ---
 GLuint Program;
-
 GLint Attrib_vertex;
+GLint Unif_colorType;
 
-GLuint VBO;
+// Используем только VBO (буферы данных), VAO будем игнорировать для надежности
+GLuint VBO_quad, VBO_fan, VBO_pentagon;
+
+// Счетчики вершин
+int quad_vertex_count = 0;
+int fan_vertex_count = 0;
+int pentagon_vertex_count = 0;
 
 struct Vertex {
-	GLfloat x;
-	GLfloat y;
+    GLfloat x;
+    GLfloat y;
 };
 
+// --- ШЕЙДЕРЫ ---
 const char* VertexShaderSource = R"(
- #version 330 core
- in vec2 coord;
- void main() {
-	gl_Position = vec4(coord, 0.0, 1.0);
- }
+#version 120
+attribute vec2 coord;
+void main() {
+   // Применяем матрицу проекции и модели
+   gl_Position = gl_ModelViewProjectionMatrix * vec4(coord, 0.0, 1.0);
+}
 )";
 
 const char* FragShaderSource = R"(
- #version 330 core
- out vec4 color;
- void main() {
-	color = vec4(0, 1, 0, 1);
- }
+#version 120
+uniform int figureType;
+void main() {
+    if (figureType == 0) {
+        gl_FragColor = vec4(1.0, 0.0, 0.0, 1.0); // 0: Красный
+    } else if (figureType == 1) {
+        gl_FragColor = vec4(0.0, 1.0, 0.0, 1.0); // 1: Зеленый
+    } else {
+        gl_FragColor = vec4(0.0, 0.0, 1.0, 1.0); // 2: Синий
+    }
+}
 )";
 
-void ShaderLog(unsigned int shader)
-{
-	int infologLen = 0;
-	glGetShaderiv(shader, GL_INFO_LOG_LENGTH, &infologLen);
-	if (infologLen > 1)
-	{
-		int charsWritten = 0;
-		std::vector<char> infoLog(infologLen);
-		glGetShaderInfoLog(shader, infologLen, &charsWritten, infoLog.data());
-		std::cout << "InfoLog: " << infoLog.data() << std::endl;
-	}
-}
-
-void checkOpenGLerror()
-{
-	GLenum err;
-	while ((err = glGetError()) != GL_NO_ERROR) {
-		std::cerr << "OpenGL error: 0x" << std::hex << err << std::dec << '\n';
-	}
-}
-
 void InitShader() {
-	GLuint vShader = glCreateShader(GL_VERTEX_SHADER);
-	glShaderSource(vShader, 1, &VertexShaderSource, NULL);
-	glCompileShader(vShader);
-	std::cout << "vertex shader \n";
+    GLuint vShader = glCreateShader(GL_VERTEX_SHADER);
+    glShaderSource(vShader, 1, &VertexShaderSource, NULL);
+    glCompileShader(vShader);
 
-	ShaderLog(vShader);
-	GLuint fShader = glCreateShader(GL_FRAGMENT_SHADER);
-	glShaderSource(fShader, 1, &FragShaderSource, NULL);
-	glCompileShader(fShader);
-	std::cout << "fragment shader \n";
+    GLuint fShader = glCreateShader(GL_FRAGMENT_SHADER);
+    glShaderSource(fShader, 1, &FragShaderSource, NULL);
+    glCompileShader(fShader);
 
-	ShaderLog(fShader);
+    Program = glCreateProgram();
+    glAttachShader(Program, vShader);
+    glAttachShader(Program, fShader);
+    glLinkProgram(Program);
 
-	Program = glCreateProgram();
-	glAttachShader(Program, vShader);
-	glAttachShader(Program, fShader);
-	glLinkProgram(Program);
+    Attrib_vertex = glGetAttribLocation(Program, "coord");
+    Unif_colorType = glGetUniformLocation(Program, "figureType");
 
-	int link_ok;
-	glGetProgramiv(Program, GL_LINK_STATUS, &link_ok);
-	if (!link_ok) {
-		std::cout << "error attach shaders \n";
-		return;
-	}
-
-	const char* attr_name = "coord";
-	Attrib_vertex = glGetAttribLocation(Program, attr_name);
-	if (Attrib_vertex == -1) {
-		std::cout << "could not bind attrib " << attr_name << std::endl;
-		return;
-	}
-	checkOpenGLerror();
+    glDeleteShader(vShader);
+    glDeleteShader(fShader);
 }
 
-void InitVBO() {
-	glGenBuffers(1, &VBO);
+// 1. Создаем данные Квадрата
+void InitQuadData() {
+    std::vector<Vertex> vertices = {
+        { -0.5f,  0.5f },
+        { -0.5f, -0.5f },
+        {  0.5f, -0.5f },
+        {  0.5f,  0.5f }
+    };
+    quad_vertex_count = vertices.size();
 
-	Vertex triangle[3] = {
-	 { -1.0f, -1.0f },
-	 { 0.0f, 1.0f },
-	 { 1.0f, -1.0f }
-	};
+    glGenBuffers(1, &VBO_quad);
+    glBindBuffer(GL_ARRAY_BUFFER, VBO_quad);
+    glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(Vertex), vertices.data(), GL_STATIC_DRAW);
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
+}
 
-	glBindBuffer(GL_ARRAY_BUFFER, VBO);
-	glBufferData(GL_ARRAY_BUFFER, sizeof(triangle), triangle, GL_STATIC_DRAW);
-	checkOpenGLerror();
+// 2. Создаем данные Веера (Полукруг)
+void InitFanData() {
+    std::vector<Vertex> vertices;
+    vertices.push_back({0.0f, -0.5f}); // Центр внизу
+
+    // Генерируем 30 сегментов (очень гладкий полукруг)
+    int segments = 30;
+    float radius = 0.8f;
+
+    // От 0 до 180 градусов (PI)
+    for (int i = 0; i <= segments; i++) {
+        float angle = M_PI * i / segments;
+        vertices.push_back({
+            radius * cos(angle),
+            radius * sin(angle) - 0.5f
+        });
+    }
+    fan_vertex_count = vertices.size();
+
+    glGenBuffers(1, &VBO_fan);
+    glBindBuffer(GL_ARRAY_BUFFER, VBO_fan);
+    glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(Vertex), vertices.data(), GL_STATIC_DRAW);
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
+}
+
+// 3. Создаем данные Пятиугольника
+void InitPentagonData() {
+    std::vector<Vertex> vertices;
+    vertices.push_back({0.0f, 0.0f}); // Центр
+
+    int sides = 5;
+    float radius = 0.5f;
+
+    // Полный круг (2*PI), деленный на 5
+    for (int i = 0; i <= sides; i++) {
+        float angle = 2.0f * M_PI * i / sides + M_PI / 2.0f;
+        vertices.push_back({
+            radius * cos(angle),
+            radius * sin(angle)
+        });
+    }
+    pentagon_vertex_count = vertices.size();
+
+    glGenBuffers(1, &VBO_pentagon);
+    glBindBuffer(GL_ARRAY_BUFFER, VBO_pentagon);
+    glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(Vertex), vertices.data(), GL_STATIC_DRAW);
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
 }
 
 void Init() {
-	InitShader();
-	InitVBO();
-}
-
-
-void Draw() {
-	glUseProgram(Program);
-	glEnableVertexAttribArray(Attrib_vertex);
-	glBindBuffer(GL_ARRAY_BUFFER, VBO);
-
-	//���������� ������ � ������������ ������ ��������
-	glVertexAttribPointer(Attrib_vertex, 2, GL_FLOAT, GL_FALSE, 0, 0);
-	glBindBuffer(GL_ARRAY_BUFFER, 0);
-	glDrawArrays(GL_TRIANGLES, 0, 3);
-
-	glDisableVertexAttribArray(Attrib_vertex);
-	glUseProgram(0);
-
-}
-
-void ReleaseVBO() {
-	glBindBuffer(GL_ARRAY_BUFFER, 0);
-	glDeleteBuffers(1, &VBO);
-}
-
-void ReleaseShader() {
-	glUseProgram(0);
-	glDeleteProgram(Program);
+    InitShader();
+    InitQuadData();
+    InitFanData();
+    InitPentagonData();
 }
 
 void Release() {
-	ReleaseShader();
-	ReleaseVBO();
+    glDeleteBuffers(1, &VBO_quad);
+    glDeleteBuffers(1, &VBO_fan);
+    glDeleteBuffers(1, &VBO_pentagon);
+    glDeleteProgram(Program);
 }
 
 int main() {
-	sf::Window window(sf::VideoMode({ 600, 600 }), "My OpenGL window");
-	window.setVerticalSyncEnabled(true);
-	window.setActive(true);
+    std::cout << "--- ЗАПУСК ВЕРСИИ С ЯВНОЙ ПРИВЯЗКОЙ (FIX) ---" << std::endl;
 
-	if (glewInit() != GLEW_OK) {
-		std::cerr << "Failed to initialize GLEW\n";
-		return -1;
-	}
+    sf::ContextSettings settings;
+    settings.depthBits = 24;
+    settings.majorVersion = 2;
+    settings.minorVersion = 1;
 
-	Init();
+    sf::Window window(sf::VideoMode({800, 600}), "Fixed Shapes", sf::State::Windowed, settings);
+    window.setVerticalSyncEnabled(true);
+    window.setActive(true);
 
-	while (window.isOpen()) {
-		while (const std::optional event = window.pollEvent()) {
-			if (event->is<sf::Event::Closed>()) {
-				window.close();
-			}
-			else if (const sf::Event::Resized* resized = event->getIf<sf::Event::Resized>()) {
-				glViewport(0, 0, resized->size.x, resized->size.y);
-			}
-		}
-		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-		Draw();
-		window.display();
-	}
-	Release();
-	return 0;
+    glewExperimental = GL_TRUE;
+    glewInit();
+
+    Init();
+
+    glMatrixMode(GL_PROJECTION);
+    glLoadIdentity();
+    float ratio = 800.0f / 600.0f;
+    glOrtho(-2.0 * ratio, 2.0 * ratio, -2.0, 2.0, -1.0, 1.0);
+
+    glMatrixMode(GL_MODELVIEW);
+
+    while (window.isOpen()) {
+        while (std::optional<sf::Event> event = window.pollEvent()) {
+            if (event->is<sf::Event::Closed>()) window.close();
+            else if (const sf::Event::Resized* resized = event->getIf<sf::Event::Resized>()) {
+                glViewport(0, 0, resized->size.x, resized->size.y);
+            }
+        }
+
+        glClearColor(0.2f, 0.2f, 0.2f, 1.0f);
+        glClear(GL_COLOR_BUFFER_BIT);
+
+        glUseProgram(Program);
+        glEnableVertexAttribArray(Attrib_vertex);
+
+        // --- 1. КВАДРАТ (Красный) ---
+        glLoadIdentity();
+        glTranslatef(-1.5f, 0.0f, 0.0f);
+        glUniform1i(Unif_colorType, 0);
+
+        // ЯВНАЯ ПРИВЯЗКА: Подключаем буфер квадрата прямо перед рисованием
+        glBindBuffer(GL_ARRAY_BUFFER, VBO_quad);
+        glVertexAttribPointer(Attrib_vertex, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)0);
+        glDrawArrays(GL_TRIANGLE_FAN, 0, quad_vertex_count);
+
+        // --- 2. ВЕЕР (Зеленый) ---
+        glLoadIdentity();
+        glTranslatef(0.0f, 0.0f, 0.0f);
+        glUniform1i(Unif_colorType, 1);
+
+        // Подключаем буфер веера
+        glBindBuffer(GL_ARRAY_BUFFER, VBO_fan);
+        // Заново говорим OpenGL, где брать данные
+        glVertexAttribPointer(Attrib_vertex, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)0);
+        // Рисуем (теперь точно возьмет данные из VBO_fan)
+        glDrawArrays(GL_TRIANGLE_FAN, 0, fan_vertex_count);
+
+        // --- 3. ПЯТИУГОЛЬНИК (Синий) ---
+        glLoadIdentity();
+        glTranslatef(1.5f, 0.0f, 0.0f);
+        glUniform1i(Unif_colorType, 2);
+
+        // Подключаем буфер пятиугольника
+        glBindBuffer(GL_ARRAY_BUFFER, VBO_pentagon);
+        glVertexAttribPointer(Attrib_vertex, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)0);
+        glDrawArrays(GL_TRIANGLE_FAN, 0, pentagon_vertex_count);
+
+        // Отключаем
+        glBindBuffer(GL_ARRAY_BUFFER, 0);
+        glUseProgram(0);
+
+        window.display();
+    }
+
+    Release();
+    return 0;
 }
