@@ -8,7 +8,7 @@ find_package(SFML 3.0 COMPONENTS Graphics Window System REQUIRED)
 
 find_package(GLEW REQUIRED)
 
-add_executable(${PROJECT_NAME} main.cpp)
+add_executable(${PROJECT_NAME} "lab12.cpp")
 
 target_link_libraries(${PROJECT_NAME}
     PRIVATE
@@ -17,6 +17,19 @@ target_link_libraries(${PROJECT_NAME}
         SFML::System
         GLEW::GLEW
 )
+
+set(TEXTURE_FILE "texture.jpg")
+
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/${TEXTURE_FILE}")    
+    add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${CMAKE_CURRENT_SOURCE_DIR}/${TEXTURE_FILE}"            
+            "$<TARGET_FILE_DIR:${PROJECT_NAME}>/${TEXTURE_FILE}"
+        COMMENT "Copying texture file: ${TEXTURE_FILE}"
+    )
+else()
+    message(WARNING "Texture file ${TEXTURE_FILE} not found in source directory. Program might fail to run.")
+endif()
 
 if(APPLE)
     find_library(OPENGL_FRAMEWORK OpenGL)
