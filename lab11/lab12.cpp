@@ -12,6 +12,7 @@ const GLuint WINDOW_WIDTH = 800;
 const GLuint WINDOW_HEIGHT = 600;
 const GLfloat MOVE_SPEED = 0.05f;
 const GLfloat COLOR_CHANGE_SPEED = 0.01f;
+const GLfloat SCALE_SPEED = 0.05f;
 
 enum class ActiveShape {
 	TETRAHEDRON,
@@ -581,7 +582,8 @@ void renderDoubleCube(const DoubleCube& cube, const Shader& shader, const Matrix
 
 	Matrix4 model = Identity();
 	GLfloat rotAngle = (GLfloat)sf::Mouse::getPosition().x * 0.005f;
-	model = Rotate(model, rotAngle, { 1.0f, 1.0f, 0.0f }); // Вращаем по диагонали для разнообразия
+	model = Rotate(model, 25.0f * PI / 180.0f, { 1.0f, 0.0f, 0.0f });
+	model = Rotate(model, rotAngle, { 0.0f, 1.0f, 0.0f });
 
 	glUniformMatrix4fv(glGetUniformLocation(shader.programID, "model"), 1, GL_FALSE, model.m);
 	glUniformMatrix4fv(glGetUniformLocation(shader.programID, "view"), 1, GL_FALSE, view.m);
@@ -654,7 +656,7 @@ int main() {
 	glEnable(GL_DEPTH_TEST);
 	glViewport(0, 0, WINDOW_WIDTH, WINDOW_HEIGHT);
 
-	Shader simpleShader;
+	Shader tetraShader;
 	tetraShader.programID = compileShaders(tetraVertexShaderSource, tetraFragmentShaderSource);
 
 	Shader cubeShader;
@@ -761,7 +763,7 @@ int main() {
 		switch (currentShape)
 		{
 		case ActiveShape::TETRAHEDRON:
-			renderTetrahedron(tetra, simpleShader, view, projection);
+			renderTetrahedron(tetra, tetraShader, view, projection);
 			break;
 		case ActiveShape::CUBE:
 			renderCube(cube, cubeShader, view, projection);
@@ -770,7 +772,7 @@ int main() {
 			renderDoubleCube(doubleCube, doubleTexShader, view, projection);
 			break;
 		case ActiveShape::CIRCLE:
-			renderCircle(circle, simpleShader, view, projection);
+			renderCircle(circle, tetraShader, view, projection);
 			break;
 		}
 		glBindVertexArray(0);

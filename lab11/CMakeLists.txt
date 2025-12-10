@@ -18,18 +18,20 @@ target_link_libraries(${PROJECT_NAME}
         GLEW::GLEW
 )
 
-set(TEXTURE_FILE "texture.jpg")
+set(TEXTURE_FILES "texture.jpg" "texture2.jpg")
 
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/${TEXTURE_FILE}")    
-    add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different
-            "${CMAKE_CURRENT_SOURCE_DIR}/${TEXTURE_FILE}"            
-            "$<TARGET_FILE_DIR:${PROJECT_NAME}>/${TEXTURE_FILE}"
-        COMMENT "Copying texture file: ${TEXTURE_FILE}"
-    )
-else()
-    message(WARNING "Texture file ${TEXTURE_FILE} not found in source directory. Program might fail to run.")
-endif()
+foreach(TEXTURE_FILE IN LISTS TEXTURE_FILES)
+    if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/${TEXTURE_FILE}")    
+        add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                "${CMAKE_CURRENT_SOURCE_DIR}/${TEXTURE_FILE}"            
+                "$<TARGET_FILE_DIR:${PROJECT_NAME}>/${TEXTURE_FILE}"
+            COMMENT "Copying texture file: ${TEXTURE_FILE}"
+        )
+    else()
+        message(WARNING "Texture file ${TEXTURE_FILE} not found in source directory. Program might fail to run.")
+    endif()
+endforeach()
 
 if(APPLE)
     find_library(OPENGL_FRAMEWORK OpenGL)
