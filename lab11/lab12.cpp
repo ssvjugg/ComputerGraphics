@@ -12,10 +12,13 @@ const GLuint WINDOW_WIDTH = 800;
 const GLuint WINDOW_HEIGHT = 600;
 const GLfloat MOVE_SPEED = 0.05f;
 const GLfloat COLOR_CHANGE_SPEED = 0.01f;
+const GLfloat SCALE_SPEED = 0.05f;
 
 enum class ActiveShape {
 	TETRAHEDRON,
-	CUBE
+	CUBE,
+	DOUBLE_CUBE, // 3
+	CIRCLE       // 4
 };
 
 struct Shader {
@@ -33,10 +36,25 @@ struct Cube {
 	GLfloat colorMixFactor = 0.0f;
 };
 
+struct DoubleCube {
+	GLuint VAO, VBO, EBO;
+	GLuint texture1ID;
+	GLuint texture2ID;
+	GLint indexCount = 36;
+	GLfloat texMixFactor = 0.5f; // Смешивание текстур (0.0 - 1.0)
+};
+
 struct Tetrahedron {
 	GLuint VAO, VBO, EBO;
 	GLint indexCount = 12;
 	Vec3 position = { 0.0f, 0.0f, 0.0f };
+};
+
+struct Circle {
+	GLuint VAO, VBO;
+	GLint vertexCount = 0;
+	GLfloat scaleX = 1.0f;
+	GLfloat scaleY = 1.0f;
 };
 
 struct Matrix4 {
@@ -67,6 +85,14 @@ Matrix4 Translate(const Matrix4& M, const Vec3& v) {
 	T.m[13] = v.y;
 	T.m[14] = v.z;
 	return Multiply(M, T);
+}
+
+Matrix4 Scale(const Matrix4& M, GLfloat sx, GLfloat sy, GLfloat sz) {
+	Matrix4 S = Identity();
+	S.m[0] = sx;
+	S.m[5] = sy;
+	S.m[10] = sz;
+	return Multiply(M, S);
 }
 
 Matrix4 Rotate(const Matrix4& M, GLfloat angleRad, const Vec3& axis) {
@@ -135,6 +161,22 @@ Matrix4 LookAt(const Vec3& position, const Vec3& target, const Vec3& up) {
 	return view;
 }
 
+// Утилиты цвета HSV
+void hsv2rgb(float h, float s, float v, float& r, float& g, float& b) {
+	float c = v * s;
+	float x = c * (1 - std::abs(std::fmod(h / 60.0f, 2) - 1));
+	float m = v - c;
+
+	if (h >= 0 && h < 60) { r = c; g = x; b = 0; }
+	else if (h >= 60 && h < 120) { r = x; g = c; b = 0; }
+	else if (h >= 120 && h < 180) { r = 0; g = c; b = x; }
+	else if (h >= 180 && h < 240) { r = 0; g = x; b = c; }
+	else if (h >= 240 && h < 300) { r = x; g = 0; b = c; }
+	else { r = c; g = 0; b = x; }
+
+	r += m; g += m; b += m;
+}
+
 const char* tetraVertexShaderSource = R"(
 #version 330 core
 layout (location = 0) in vec3 aPos;
@@ -198,6 +240,43 @@ void main()
 {
     vec4 textureColor = texture(ourTexture, vTexCoord);    
     FragColor = mix(textureColor, vec4(vColor, 1.0), colorMixFactor);
+}
+)";
+
+// 3. Double Texture Mix Shader
+const char* doubleTexVertexShaderSource = R"(
+#version 330 core
+layout (location = 0) in vec3 aPos;
+layout (location = 2) in vec2 aTexCoord; 
+// Цвет вершин здесь не важен, но атрибуты должны совпадать с VAO
+
+out vec2 vTexCoord;
+
+uniform mat4 model;
+uniform mat4 view;
+uniform mat4 projection;
+
+void main()
+{
+    vTexCoord = aTexCoord;
+    gl_Position = projection * view * model * vec4(aPos, 1.0);
+}
+)";
+
+const char* doubleTexFragmentShaderSource = R"(
+#version 330 core
+in vec2 vTexCoord;
+out vec4 FragColor;
+
+uniform sampler2D texture1;
+uniform sampler2D texture2;
+uniform float mixFactor;
+
+void main()
+{
+    vec4 col1 = texture(texture1, vTexCoord);
+    vec4 col2 = texture(texture2, vTexCoord);
+    FragColor = mix(col1, col2, mixFactor);
 }
 )";
 
@@ -286,48 +365,56 @@ void setupTetrahedron(Tetrahedron& tetra)
 	glBindVertexArray(0);
 }
 
-void setupCube(Cube& cube)
-{
-	GLfloat cubeVertices[] = {				
+std::vector<GLfloat> getCubeVertices() {
+	return {
+		// Pos                  // Color           // Tex
 		-0.5f, -0.5f,  0.5f,  1.0f, 0.0f, 0.0f,  0.0f, 0.0f,
 		 0.5f, -0.5f,  0.5f,  1.0f, 0.5f, 0.5f,  1.0f, 0.0f,
 		 0.5f,  0.5f,  0.5f,  1.0f, 1.0f, 1.0f,  1.0f, 1.0f,
 		-0.5f,  0.5f,  0.5f,  1.0f, 0.0f, 1.0f,  0.0f, 1.0f,
-		
+
 		-0.5f, -0.5f, -0.5f,  0.0f, 1.0f, 0.0f,  0.0f, 0.0f,
 		 0.5f, -0.5f, -0.5f,  0.5f, 1.0f, 0.5f,  1.0f, 0.0f,
 		 0.5f,  0.5f, -0.5f,  1.0f, 1.0f, 1.0f,  1.0f, 1.0f,
 		-0.5f,  0.5f, -0.5f,  0.0f, 0.0f, 1.0f,  0.0f, 1.0f,
-		
+
 		-0.5f,  0.5f,  0.5f,  0.0f, 0.0f, 1.0f,  0.0f, 1.0f,
 		-0.5f,  0.5f, -0.5f,  0.5f, 0.5f, 1.0f,  1.0f, 1.0f,
 		-0.5f, -0.5f, -0.5f,  1.0f, 1.0f, 1.0f,  1.0f, 0.0f,
 		-0.5f, -0.5f,  0.5f,  1.0f, 0.0f, 0.0f,  0.0f, 0.0f,
-		
+
 		 0.5f,  0.5f,  0.5f,  0.0f, 1.0f, 0.0f,  0.0f, 1.0f,
 		 0.5f,  0.5f, -0.5f,  0.0f, 0.0f, 1.0f,  1.0f, 1.0f,
 		 0.5f, -0.5f, -0.5f,  1.0f, 0.0f, 0.0f,  1.0f, 0.0f,
 		 0.5f, -0.5f,  0.5f,  1.0f, 1.0f, 1.0f,  0.0f, 0.0f,
-		 
+
 		 -0.5f, -0.5f, -0.5f,  1.0f, 0.0f, 0.0f,  0.0f, 0.0f,
 		  0.5f, -0.5f, -0.5f,  0.0f, 1.0f, 0.0f,  1.0f, 0.0f,
 		  0.5f, -0.5f,  0.5f,  0.0f, 0.0f, 1.0f,  1.0f, 1.0f,
 		 -0.5f, -0.5f,  0.5f,  1.0f, 1.0f, 1.0f,  0.0f, 1.0f,
-		 
+
 		 -0.5f,  0.5f, -0.5f,  0.0f, 0.0f, 1.0f,  0.0f, 0.0f,
 		  0.5f,  0.5f, -0.5f,  0.0f, 1.0f, 0.0f,  1.0f, 0.0f,
 		  0.5f,  0.5f,  0.5f,  1.0f, 1.0f, 1.0f,  1.0f, 1.0f,
 		 -0.5f,  0.5f,  0.5f,  1.0f, 0.0f, 0.0f,  0.0f, 1.0f
 	};
+}
 
-	GLuint cubeIndices[] = {
-		0, 1, 2, 2, 3, 0,		
-		4, 5, 6, 6, 7, 4,		
-		8, 9, 10, 10, 11, 8,		
-		12, 13, 14, 14, 15, 12,		
-		16, 17, 18, 18, 19, 16,		
+std::vector<GLuint> getCubeIndices() {
+	return {
+		0, 1, 2, 2, 3, 0,
+		4, 5, 6, 6, 7, 4,
+		8, 9, 10, 10, 11, 8,
+		12, 13, 14, 14, 15, 12,
+		16, 17, 18, 18, 19, 16,
 		20, 21, 22, 22, 23, 20
 	};
+}
+
+void setupCube(Cube& cube)
+{
+	auto vertices = getCubeVertices();
+	auto indices = getCubeIndices();
 
 	glGenVertexArrays(1, &cube.VAO);
 	glGenBuffers(1, &cube.VBO);
@@ -336,10 +423,10 @@ void setupCube(Cube& cube)
 	glBindVertexArray(cube.VAO);
 
 	glBindBuffer(GL_ARRAY_BUFFER, cube.VBO);
-	glBufferData(GL_ARRAY_BUFFER, sizeof(cubeVertices), cubeVertices, GL_STATIC_DRAW);
+	glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(GLfloat), vertices.data(), GL_STATIC_DRAW);
 
 	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, cube.EBO);
-	glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(cubeIndices), cubeIndices, GL_STATIC_DRAW);
+	glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof(GLuint), indices.data(), GL_STATIC_DRAW);
 
 	const GLsizei stride = 8 * sizeof(GLfloat);
 
@@ -355,6 +442,96 @@ void setupCube(Cube& cube)
 	glBindVertexArray(0);
 
 	cube.textureID = loadTexture("texture.jpg");
+}
+
+void setupDoubleCube(DoubleCube& cube)
+{
+	// Используем ту же геометрию, что и обычный куб
+	auto vertices = getCubeVertices();
+	auto indices = getCubeIndices();
+
+	glGenVertexArrays(1, &cube.VAO);
+	glGenBuffers(1, &cube.VBO);
+	glGenBuffers(1, &cube.EBO);
+
+	glBindVertexArray(cube.VAO);
+
+	glBindBuffer(GL_ARRAY_BUFFER, cube.VBO);
+	glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(GLfloat), vertices.data(), GL_STATIC_DRAW);
+
+	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, cube.EBO);
+	glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof(GLuint), indices.data(), GL_STATIC_DRAW);
+
+	const GLsizei stride = 8 * sizeof(GLfloat);
+	// Pos
+	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, stride, (void*)0);
+	glEnableVertexAttribArray(0);
+	// Color (пропускаем или игнорируем, но можно оставить для совместимости)
+	glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, stride, (void*)(3 * sizeof(GLfloat)));
+	glEnableVertexAttribArray(1);
+	// TexCoords
+	glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, stride, (void*)(6 * sizeof(GLfloat)));
+	glEnableVertexAttribArray(2);
+
+	glBindVertexArray(0);
+
+	cube.texture1ID = loadTexture("texture.jpg");
+	// ВАЖНО: Предполагается наличие texture2.jpg
+	cube.texture2ID = loadTexture("texture2.jpg");
+
+	if (cube.texture2ID == 0) {
+		std::cout << "Внимание: texture2.jpg не найдена. Создайте копию texture.jpg с именем texture2.jpg для проверки." << std::endl;
+		cube.texture2ID = cube.texture1ID; // Fallback
+	}
+}
+
+void setupCircle(Circle& circle)
+{
+	std::vector<GLfloat> vertices;
+
+	// Центральная вершина: Белый цвет
+	// Pos (x,y,z) | Color (r,g,b)
+	vertices.push_back(0.0f); vertices.push_back(0.0f); vertices.push_back(0.0f);
+	vertices.push_back(1.0f); vertices.push_back(1.0f); vertices.push_back(1.0f);
+
+	int segments = 60;
+	float radius = 1.0f;
+
+	for (int i = 0; i <= segments; ++i) {
+		float angle = 2.0f * (float)PI * (float)i / (float)segments;
+		float x = radius * cosf(angle);
+		float y = radius * sinf(angle);
+
+		// HSV to RGB
+		float hue = (float)i / (float)segments * 360.0f;
+		float r, g, b;
+		hsv2rgb(hue, 1.0f, 1.0f, r, g, b);
+
+		vertices.push_back(x);
+		vertices.push_back(y);
+		vertices.push_back(0.0f);
+		vertices.push_back(r);
+		vertices.push_back(g);
+		vertices.push_back(b);
+	}
+
+	circle.vertexCount = (segments + 2); // Center + surrounding points
+
+	glGenVertexArrays(1, &circle.VAO);
+	glGenBuffers(1, &circle.VBO);
+
+	glBindVertexArray(circle.VAO);
+	glBindBuffer(GL_ARRAY_BUFFER, circle.VBO);
+	glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(GLfloat), vertices.data(), GL_STATIC_DRAW);
+
+	// Stride = 6 floats (3 pos + 3 color)
+	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)0);
+	glEnableVertexAttribArray(0);
+
+	glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)(3 * sizeof(float)));
+	glEnableVertexAttribArray(1);
+
+	glBindVertexArray(0);
 }
 
 void renderTetrahedron(const Tetrahedron& tetra, const Shader& shader, const Matrix4& view, const Matrix4& projection)
@@ -398,6 +575,56 @@ void renderCube(const Cube& cube, const Shader& shader, const Matrix4& view, con
 	glDrawElements(GL_TRIANGLES, cube.indexCount, GL_UNSIGNED_INT, 0);
 }
 
+// Рендер куба с двумя текстурами
+void renderDoubleCube(const DoubleCube& cube, const Shader& shader, const Matrix4& view, const Matrix4& projection)
+{
+	glUseProgram(shader.programID);
+
+	Matrix4 model = Identity();
+	GLfloat rotAngle = (GLfloat)sf::Mouse::getPosition().x * 0.005f;
+	model = Rotate(model, 25.0f * PI / 180.0f, { 1.0f, 0.0f, 0.0f });
+	model = Rotate(model, rotAngle, { 0.0f, 1.0f, 0.0f });
+
+	glUniformMatrix4fv(glGetUniformLocation(shader.programID, "model"), 1, GL_FALSE, model.m);
+	glUniformMatrix4fv(glGetUniformLocation(shader.programID, "view"), 1, GL_FALSE, view.m);
+	glUniformMatrix4fv(glGetUniformLocation(shader.programID, "projection"), 1, GL_FALSE, projection.m);
+
+	glUniform1f(glGetUniformLocation(shader.programID, "mixFactor"), cube.texMixFactor);
+
+	// Биндим первую текстуру
+	glActiveTexture(GL_TEXTURE0);
+	glBindTexture(GL_TEXTURE_2D, cube.texture1ID);
+	glUniform1i(glGetUniformLocation(shader.programID, "texture1"), 0);
+
+	// Биндим вторую текстуру
+	glActiveTexture(GL_TEXTURE1);
+	glBindTexture(GL_TEXTURE_2D, cube.texture2ID);
+	glUniform1i(glGetUniformLocation(shader.programID, "texture2"), 1);
+
+	glBindVertexArray(cube.VAO);
+	glDrawElements(GL_TRIANGLES, cube.indexCount, GL_UNSIGNED_INT, 0);
+}
+
+// Рендер круга
+void renderCircle(const Circle& circle, const Shader& shader, const Matrix4& view, const Matrix4& projection)
+{
+	glUseProgram(shader.programID);
+
+	Matrix4 model = Identity();
+	// Поворачиваем немного, чтобы было видно, что это плоскость в 3D
+	// model = Rotate(model, 10.0f * (float)PI / 180.0f, { 1.0f, 0.0f, 0.0f });
+
+	// Применяем масштабирование по осям (каждая кнопка своя)
+	model = Scale(model, circle.scaleX, circle.scaleY, 1.0f);
+
+	glUniformMatrix4fv(glGetUniformLocation(shader.programID, "model"), 1, GL_FALSE, model.m);
+	glUniformMatrix4fv(glGetUniformLocation(shader.programID, "view"), 1, GL_FALSE, view.m);
+	glUniformMatrix4fv(glGetUniformLocation(shader.programID, "projection"), 1, GL_FALSE, projection.m);
+
+	glBindVertexArray(circle.VAO);
+	glDrawArrays(GL_TRIANGLE_FAN, 0, circle.vertexCount);
+}
+
 void cleanup(const Tetrahedron& tetra, const Cube& cube, const Shader& tetraShader, const Shader& cubeShader)
 {
 	glDeleteVertexArrays(1, &tetra.VAO);
@@ -435,13 +662,24 @@ int main() {
 	Shader cubeShader;
 	cubeShader.programID = compileShaders(cubeVertexShaderSource, cubeFragmentShaderSource);
 
+	Shader doubleTexShader;
+	doubleTexShader.programID = compileShaders(doubleTexVertexShaderSource, doubleTexFragmentShaderSource);
+
 	Tetrahedron tetra;
 	setupTetrahedron(tetra);
 
 	Cube cube;
 	setupCube(cube);
 
+	DoubleCube doubleCube;
+	setupDoubleCube(doubleCube);
+
+	Circle circle;
+	setupCircle(circle);
+
 	ActiveShape currentShape = ActiveShape::TETRAHEDRON;
+
+	std::cout << "Управление:\n1 - Тетраэдр\n2 - Куб (Текстура+Цвет)\n3 - Куб (2 Текстуры)\n4 - Круг\n";
 
 	while (window.isOpen())
 	{
@@ -461,7 +699,16 @@ int main() {
 					currentShape = ActiveShape::CUBE;
 					std::cout << "Активная фигура: Куб" << std::endl;
 				}
+				if (key->code == sf::Keyboard::Key::Num3) {
+					currentShape = ActiveShape::DOUBLE_CUBE;
+					std::cout << "Активная фигура: Куб с двумя текстурами" << std::endl;
+				}
+				if (key->code == sf::Keyboard::Key::Num4) {
+					currentShape = ActiveShape::CIRCLE;
+					std::cout << "Активная фигура: Градиентный круг" << std::endl;
+				}
 				
+				// Управление активной фигурой
 				if (currentShape == ActiveShape::TETRAHEDRON) {
 					if (key->code == sf::Keyboard::Key::A)
 						tetra.position.x -= MOVE_SPEED;
@@ -489,17 +736,44 @@ int main() {
 						if (cube.colorMixFactor < 0.0f) cube.colorMixFactor = 0.0f;
 					}
 				}
+
+				else if (currentShape == ActiveShape::DOUBLE_CUBE) {
+					if (key->code == sf::Keyboard::Key::C) {
+						doubleCube.texMixFactor += COLOR_CHANGE_SPEED;
+						if (doubleCube.texMixFactor > 1.0f) doubleCube.texMixFactor = 1.0f;
+					}
+					if (key->code == sf::Keyboard::Key::V) {
+						doubleCube.texMixFactor -= COLOR_CHANGE_SPEED;
+						if (doubleCube.texMixFactor < 0.0f) doubleCube.texMixFactor = 0.0f;
+					}
+				}
+
+				else if (currentShape == ActiveShape::CIRCLE) {
+					if (key->code == sf::Keyboard::Key::A) circle.scaleX -= SCALE_SPEED;
+					if (key->code == sf::Keyboard::Key::D) circle.scaleX += SCALE_SPEED;
+					if (key->code == sf::Keyboard::Key::S) circle.scaleY -= SCALE_SPEED;
+					if (key->code == sf::Keyboard::Key::W) circle.scaleY += SCALE_SPEED;
+				}
 			}
 		}
 		glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 		Matrix4 projection = Perspective(45.0f, (GLfloat)WINDOW_WIDTH / (GLfloat)WINDOW_HEIGHT, 0.1f, 100.0f);
 		Matrix4 view = LookAt({ 0.0f, 0.0f, 8.0f }, { 0.0f, 0.0f, 0.0f }, { 0.0f, 1.0f, 0.0f });
-		if (currentShape == ActiveShape::TETRAHEDRON) {
+		switch (currentShape)
+		{
+		case ActiveShape::TETRAHEDRON:
 			renderTetrahedron(tetra, tetraShader, view, projection);
-		}
-		else if (currentShape == ActiveShape::CUBE) {
+			break;
+		case ActiveShape::CUBE:
 			renderCube(cube, cubeShader, view, projection);
+			break;
+		case ActiveShape::DOUBLE_CUBE:
+			renderDoubleCube(doubleCube, doubleTexShader, view, projection);
+			break;
+		case ActiveShape::CIRCLE:
+			renderCircle(circle, tetraShader, view, projection);
+			break;
 		}
 		glBindVertexArray(0);
 		glUseProgram(0);
