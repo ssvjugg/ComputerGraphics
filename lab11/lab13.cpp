@@ -9,6 +9,8 @@
 #include <sstream>
 #include <string>
 #include <cmath>
+#include <filesystem>
+#include <memory> // Для std::shared_ptr
 
 // --- Шейдеры ---
 const char* vertexShaderSource = R"(
@@ -106,103 +108,33 @@ struct Mat4 {
     const float* data() const { return m; }
 };
 
-// --- ГЕНЕРАТОРЫ ФАЙЛОВ ---
-
-// 1. Пончик
-void generateDonutOBJ(const std::string& filename) {
-    std::ofstream file(filename);
-    if (!file.is_open()) return;
-    file << "# Generated Donut\n";
-    int segments = 40, rings = 20;
-    float majorRadius = 1.0f, minorRadius = 0.4f;
-    for (int i = 0; i <= segments; ++i) {
-        float theta = i * 2.0f * 3.14159f / segments;
-        for (int j = 0; j <= rings; ++j) {
-            float phi = j * 2.0f * 3.14159f / rings;
-            float x = (majorRadius + minorRadius * cos(phi)) * cos(theta);
-            float y = (majorRadius + minorRadius * cos(phi)) * sin(theta);
-            float z = minorRadius * sin(phi);
-            float u = (float)i / segments; float v = (float)j / rings;
-            file << "v " << x << " " << y << " " << z << "\n";
-            file << "vt " << u << " " << v << "\n";
-        }
-    }
-    for (int i = 0; i < segments; ++i) {
-        for (int j = 0; j < rings; ++j) {
-            int current = i * (rings + 1) + j + 1;
-            int next = current + (rings + 1);
-            file << "f " << current << "/" << current << " " << (current + 1) << "/" << (current + 1) << " " << next << "/" << next << "\n";
-            file << "f " << next << "/" << next << " " << (current + 1) << "/" << (current + 1) << " " << (next + 1) << "/" << (next + 1) << "\n";
-        }
-    }
-}
-
-// 2. Куб (Процедурная генерация для файла)
-void generateCubeOBJ(const std::string& filename) {
-    std::ofstream file(filename);
-    if (!file.is_open()) return;
-    file << "# Generated Cube\n";
-
-    // 8 вершин куба
-    file << "v -1 -1 -1\n v 1 -1 -1\n v 1 1 -1\n v -1 1 -1\n"; // Задняя грань (1-4)
-    file << "v -1 -1 1\n v 1 -1 1\n v 1 1 1\n v -1 1 1\n";     // Передняя грань (5-8)
-
-    // Текстурные координаты (простые)
-    file << "vt 0 0\n vt 1 0\n vt 1 1\n vt 0 1\n";
-
-    // Грани (Cube faces) - индексы v/vt
-    // Front
-    file << "f 5/1 6/2 7/3\n f 5/1 7/3 8/4\n";
-    // Back
-    file << "f 2/1 1/2 4/3\n f 2/1 4/3 3/4\n";
-    // Left
-    file << "f 1/1 5/2 8/3\n f 1/1 8/3 4/4\n";
-    // Right
-    file << "f 6/1 2/2 3/3\n f 6/1 3/3 7/4\n";
-    // Top
-    file << "f 4/1 8/2 7/3\n f 4/1 7/3 3/4\n";
-    // Bottom
-    file << "f 5/1 1/2 2/3\n f 5/1 2/3 6/4\n";
-}
-
-// 3. Пирамида
-void generatePyramidOBJ(const std::string& filename) {
-    std::ofstream file(filename);
-    if (!file.is_open()) return;
-    file << "# Generated Pyramid\n";
-
-    // Вершина (1) и Основание (2,3,4,5)
-    file << "v 0 1 0\n";
-    file << "v -1 -1 1\n v 1 -1 1\n v 1 -1 -1\n v -1 -1 -1\n";
-
-    file << "vt 0.5 1\n vt 0 0\n vt 1 0\n"; // Для боков
-    file << "vt 0 0\n vt 1 0\n vt 1 1\n vt 0 1\n"; // Для дна
-
-    // Sides
-    file << "f 2/2 3/3 1/1\n"; // Front
-    file << "f 3/2 4/3 1/1\n"; // Right
-    file << "f 4/2 5/3 1/1\n"; // Back
-    file << "f 5/2 2/3 1/1\n"; // Left
-
-    // Base (Quad as 2 tris)
-    file << "f 5/4 4/5 3/6\n f 5/4 3/6 2/7\n";
-}
-
 // --- Загрузчик ---
 class OBJModel {
     GLuint VAO, VBO;
     size_t vertexCount;
 public:
     OBJModel() : VAO(0), VBO(0), vertexCount(0) {}
-    ~OBJModel() {
+
+    // Запрещаем копирование, чтобы случайно не удалить VBO дважды
+    OBJModel(const OBJModel&) = delete;
+    OBJModel& operator=(const OBJModel&) = delete;
+
+    void clear() {
         if (VAO) glDeleteVertexArrays(1, &VAO);
         if (VBO) glDeleteBuffers(1, &VBO);
+        VAO = 0; VBO = 0; vertexCount = 0;
     }
+
+    ~OBJModel() { clear(); }
+
     bool loadFromFile(const std::string& filename) {
+        if (VAO != 0) clear(); // Чистим перед новой загрузкой
+
         std::vector<float> positions, texCoords, finalVertices;
         std::ifstream file(filename);
+
         if (!file.is_open()) {
-             std::cerr << "Error loading " << filename << "\n";
+             std::cerr << "ERROR: Could not open model file: " << filename << "\n";
              return false;
         }
 
@@ -252,8 +184,11 @@ public:
         glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)(3 * sizeof(float)));
         glEnableVertexAttribArray(1);
         glBindVertexArray(0);
+
+        std::cout << "[LOADED] " << filename << " (" << vertexCount / 3 << " polygons)\n";
         return true;
     }
+
     void draw() {
         if (VAO) { glBindVertexArray(VAO); glDrawArrays(GL_TRIANGLES, 0, vertexCount); }
     }
@@ -267,40 +202,81 @@ GLuint createShaderProgram() {
     return p;
 }
 
-// --- Структура для планет ---
+// --- Структура Планеты ---
 struct Planet {
-    OBJModel* model;    // Указатель на модель (какую фигуру рисовать)
-    float distance;     // Расстояние
-    float orbitSpeed;   // Скорость орбиты
-    float scale;        // Размер
-    float selfRotation; // Вращение вокруг оси
-    float phase;        // Сдвиг фазы
+    std::shared_ptr<OBJModel> model; // У каждой планеты своя модель
+    std::string name;                // Имя для UI
+    float distance;
+    float orbitSpeed;
+    float scale;
+    float selfRotation;
+    float phase;
 };
+
+// Функция помощник для смены модели через консоль
+void changeModelFromFile(std::shared_ptr<OBJModel> targetModel, const std::string& objectName) {
+    std::cout << "\n----------------------------------------\n";
+    std::cout << "[INPUT] Enter new .obj filename for " << objectName << ": ";
+    std::string filename;
+    std::cin >> filename;
+
+    if (std::filesystem::exists(filename)) {
+        if (targetModel->loadFromFile(filename)) {
+            std::cout << "[SUCCESS] " << objectName << " updated!\n";
+        } else {
+            std::cout << "[ERROR] Failed to parse " << filename << "\n";
+        }
+    } else {
+        std::cout << "[ERROR] File not found: " << filename << "\n";
+    }
+    std::cout << "----------------------------------------\n";
+}
 
 int main() {
     sf::ContextSettings settings;
     settings.depthBits = 24; settings.majorVersion = 3; settings.minorVersion = 3;
-    sf::Window window(sf::VideoMode({800, 600}), "Lab 13: Shapes System", sf::State::Windowed, settings);
+    sf::Window window(sf::VideoMode({800, 600}), "Lab 13: Full Customization", sf::State::Windowed, settings);
     window.setVerticalSyncEnabled(true);
     window.setActive(true);
 
     glewExperimental = GL_TRUE; glewInit();
     glEnable(GL_DEPTH_TEST);
 
-    // 1. Генерируем ФАЙЛЫ
-    generateDonutOBJ("donut.obj");
-    generateCubeOBJ("cube.obj");
-    generatePyramidOBJ("pyramid.obj");
+    // --- Инструкция ---
+    std::cout << "========================================\n";
+    std::cout << "      SOLAR SYSTEM EDITOR v1.0          \n";
+    std::cout << "========================================\n";
+    std::cout << "Press [0] -> Change SUN model\n";
+    std::cout << "Press [1] -> Change MERCURY model\n";
+    std::cout << "Press [2] -> Change VENUS model\n";
+    std::cout << "Press [3] -> Change EARTH model\n";
+    std::cout << "Press [4] -> Change MARS model\n";
+    std::cout << "----------------------------------------\n";
 
-    // 2. Загружаем модели в память
-    OBJModel donutModel;
-    donutModel.loadFromFile("donut.obj");
+    // --- Инициализация Моделей ---
+    // Создаем "умные указатели", чтобы владеть моделями
+    auto sunModel = std::make_shared<OBJModel>();
+    sunModel->loadFromFile("donut.obj"); // Дефолт для солнца
 
-    OBJModel cubeModel;
-    cubeModel.loadFromFile("cube.obj");
+    // Вектор планет. Каждая получает свой уникальный shared_ptr с начальной моделью
+    std::vector<Planet> planets;
 
-    OBJModel pyramidModel;
-    pyramidModel.loadFromFile("pyramid.obj");
+    // 1. Меркурий (Пирамида)
+    auto m1 = std::make_shared<OBJModel>(); m1->loadFromFile("pyramid.obj");
+    planets.push_back({m1, "Mercury", 3.0f, 1.2f, 0.4f, 2.0f, 0.0f});
+
+    // 2. Венера (Куб)
+    auto m2 = std::make_shared<OBJModel>(); m2->loadFromFile("cube.obj");
+    planets.push_back({m2, "Venus", 5.0f, 0.8f, 0.5f, 1.5f, 2.0f});
+
+    // 3. Земля (Пончик)
+    auto m3 = std::make_shared<OBJModel>(); m3->loadFromFile("donut.obj");
+    planets.push_back({m3, "Earth", 7.5f, 0.5f, 0.6f, 3.0f, 4.0f});
+
+    // 4. Марс (Куб)
+    auto m4 = std::make_shared<OBJModel>(); m4->loadFromFile("cube.obj");
+    planets.push_back({m4, "Mars", 10.0f, 0.3f, 0.4f, 2.5f, 1.0f});
+
 
     sf::Texture sfTexture;
     if (!sfTexture.loadFromFile("papich.jpg")) {
@@ -315,15 +291,6 @@ int main() {
     GLint viewLoc = glGetUniformLocation(shaderProgram, "view");
     GLint projLoc = glGetUniformLocation(shaderProgram, "projection");
 
-    // --- НАСТРОЙКА СИСТЕМЫ ---
-    // Теперь указываем разные модели для разных планет
-    std::vector<Planet> planets = {
-        {&pyramidModel, 3.0f,  1.2f, 0.4f, 2.0f, 0.0f}, // "Меркурий" - Пирамида
-        {&cubeModel,    5.0f,  0.8f, 0.5f, 1.5f, 2.0f}, // "Венера" - Куб
-        {&donutModel,   7.5f,  0.5f, 0.6f, 3.0f, 4.0f}, // "Земля" - Пончик
-        {&cubeModel,    10.0f, 0.3f, 0.4f, 2.5f, 1.0f}  // "Марс" - Снова Куб
-    };
-
     sf::Clock clock;
     float cameraZ = -15.0f;
     float currentWidth = 800, currentHeight = 600;
@@ -331,8 +298,31 @@ int main() {
     while (window.isOpen()) {
         while (const auto event = window.pollEvent()) {
             if (event->is<sf::Event::Closed>()) window.close();
-            if (const auto* k = event->getIf<sf::Event::KeyPressed>())
+
+            if (const auto* k = event->getIf<sf::Event::KeyPressed>()) {
                 if (k->scancode == sf::Keyboard::Scancode::Escape) window.close();
+
+                // --- ЛОГИКА СМЕНЫ МОДЕЛЕЙ ---
+
+                // 0: Солнце
+                if (k->scancode == sf::Keyboard::Scancode::Num0) {
+                    changeModelFromFile(sunModel, "Sun");
+                }
+
+                // 1..4: Планеты
+                if (k->scancode == sf::Keyboard::Scancode::Num1 && planets.size() > 0)
+                    changeModelFromFile(planets[0].model, planets[0].name);
+
+                if (k->scancode == sf::Keyboard::Scancode::Num2 && planets.size() > 1)
+                    changeModelFromFile(planets[1].model, planets[1].name);
+
+                if (k->scancode == sf::Keyboard::Scancode::Num3 && planets.size() > 2)
+                    changeModelFromFile(planets[2].model, planets[2].name);
+
+                if (k->scancode == sf::Keyboard::Scancode::Num4 && planets.size() > 3)
+                    changeModelFromFile(planets[3].model, planets[3].name);
+            }
+
             if (const auto* r = event->getIf<sf::Event::Resized>()) {
                 currentWidth = r->size.x; currentHeight = r->size.y;
                 glViewport(0, 0, r->size.x, r->size.y);
@@ -356,15 +346,15 @@ int main() {
         glUniformMatrix4fv(projLoc, 1, GL_FALSE, projection.data());
         glUniformMatrix4fv(viewLoc, 1, GL_FALSE, view.data());
 
-        // 1. СОЛНЦЕ (Пусть будет большим пончиком)
+        // ОТРИСОВКА СОЛНЦА
         {
             Mat4 model = Mat4::RotateY(time * 0.2f);
             model = model * Mat4::Scale(1.5f);
             glUniformMatrix4fv(modelLoc, 1, GL_FALSE, model.data());
-            donutModel.draw();
+            sunModel->draw();
         }
 
-        // 2. ПЛАНЕТЫ
+        // ОТРИСОВКА ПЛАНЕТ
         for (const auto& planet : planets) {
             float angle = time * planet.orbitSpeed + planet.phase;
             float x = cos(angle) * planet.distance;
@@ -372,18 +362,13 @@ int main() {
 
             Mat4 scaleMat = Mat4::Scale(planet.scale);
             Mat4 rotMat = Mat4::RotateX(time * planet.selfRotation);
-            // Добавим вращение и по Y, чтобы интереснее выглядело для кубов
             rotMat = rotMat * Mat4::RotateY(time * planet.selfRotation);
-
             Mat4 transMat = Mat4::Translate(x, 0.0f, z);
             Mat4 model = transMat * rotMat * scaleMat;
 
             glUniformMatrix4fv(modelLoc, 1, GL_FALSE, model.data());
 
-            // Самое важное: вызываем draw() у той модели, которая записана в планете
-            if (planet.model) {
-                planet.model->draw();
-            }
+            planet.model->draw();
         }
 
         window.display();

@@ -20,6 +20,27 @@ target_link_libraries(${PROJECT_NAME}
 
 set(TEXTURE_FILES "texture.jpg" "texture2.jpg")
 
+# Указываем список всех файлов ресурсов (картинки и модели)
+set(RESOURCE_FILES
+        "papich.jpg"
+        "donut.obj"
+        "cube.obj"
+        "pyramid.obj"
+)
+
+foreach(RES_FILE IN LISTS RESOURCE_FILES)
+    if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/${RES_FILE}")
+        add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+                COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                "${CMAKE_CURRENT_SOURCE_DIR}/${RES_FILE}"
+                "$<TARGET_FILE_DIR:${PROJECT_NAME}>/${RES_FILE}"
+                COMMENT "Copying resource file: ${RES_FILE}"
+        )
+    else()
+        message(WARNING "Resource file ${RES_FILE} not found in source directory! Program will crash if it tries to load it.")
+    endif()
+endforeach()
+
 foreach(TEXTURE_FILE IN LISTS TEXTURE_FILES)
     if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/${TEXTURE_FILE}")    
         add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
