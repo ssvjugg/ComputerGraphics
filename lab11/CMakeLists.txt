@@ -18,7 +18,7 @@ target_link_libraries(${PROJECT_NAME}
         GLEW::GLEW
 )
 
-set(TEXTURE_FILES "texture.jpg" "texture2.jpg")
+set(TEXTURE_FILES "texture.jpg" "texture2.jpg" "papich.jpg")
 
 # Указываем список всех файлов ресурсов (картинки и модели)
 set(RESOURCE_FILES
@@ -26,6 +26,7 @@ set(RESOURCE_FILES
         "donut.obj"
         "cube.obj"
         "pyramid.obj"
+        "chai.obj"
 )
 
 foreach(RES_FILE IN LISTS RESOURCE_FILES)

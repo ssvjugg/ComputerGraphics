@@ -42,6 +42,23 @@ const char* fragmentShaderSource = R"(
     }
 )";
 
+struct Vec3 {
+    float x, y, z;
+    Vec3 operator+(const Vec3& other) const { return { x + other.x, y + other.y, z + other.z }; }
+    Vec3 operator-(const Vec3& other) const { return { x - other.x, y - other.y, z - other.z }; }
+    Vec3 operator*(float s) const { return { x * s, y * s, z * s }; }
+    Vec3 normalize() const {
+        float len = std::sqrt(x * x + y * y + z * z);
+        return { x / len, y / len, z / len };
+    }
+    float dot(const Vec3& other) const { return x * other.x + y * other.y + z * other.z; }
+    Vec3 cross(const Vec3& other) const {
+        return { y * other.z - z * other.y,
+                z * other.x - x * other.z,
+                x * other.y - y * other.x };
+    }
+};
+
 // --- Математика ---
 struct Mat4 {
     float m[16];
@@ -94,14 +111,32 @@ struct Mat4 {
     }
 
     Mat4 operator*(const Mat4& other) const {
-        Mat4 res = {0};
-        for(int row = 0; row < 4; ++row) {
-            for(int col = 0; col < 4; ++col) {
-                for(int k = 0; k < 4; ++k) {
-                    res.m[col * 4 + row] += m[k * 4 + row] * other.m[col * 4 + k];
+        Mat4 res = { 0 };        
+        for (int row = 0; row < 4; ++row) {
+            for (int col = 0; col < 4; ++col) {
+                for (int k = 0; k < 4; ++k) {
+                    res.m[row + col * 4] += m[row + k * 4] * other.m[k + col * 4];
                 }
             }
         }
+        return res;
+    }
+
+    static Mat4 LookAt(const Vec3& eye, const Vec3& center, const Vec3& up) {
+        Vec3 f = (center - eye).normalize();
+        Vec3 s = f.cross(up).normalize();
+        Vec3 u = s.cross(f);
+
+        Mat4 res = Identity();
+
+        res.m[0] = s.x;  res.m[4] = s.y;  res.m[8] = s.z;
+        res.m[1] = u.x;  res.m[5] = u.y;  res.m[9] = u.z;
+        res.m[2] = -f.x; res.m[6] = -f.y; res.m[10] = -f.z;
+        
+        res.m[12] = -(s.dot(eye));
+        res.m[13] = -(u.dot(eye));
+        res.m[14] = -(-f.dot(eye));
+
         return res;
     }
 
@@ -232,6 +267,58 @@ void changeModelFromFile(std::shared_ptr<OBJModel> targetModel, const std::strin
     std::cout << "----------------------------------------\n";
 }
 
+class Camera {
+private:
+    Vec3 position;
+    Vec3 front;
+    Vec3 up;
+    Vec3 right;
+
+    float yaw;
+    float pitch;
+
+    void updateCameraVectors() {        
+        front.x = cos(yaw) * cos(pitch);
+        front.y = sin(pitch);
+        front.z = sin(yaw) * cos(pitch);
+        front = front.normalize();
+        
+        right = front.cross({ 0.0f, 1.0f, 0.0f }).normalize();
+        up = right.cross(front).normalize();
+    }
+
+public:
+    Camera(Vec3 pos = { 0.0f, 0.0f, 15.0f }, float initialYaw = -1.57f, float initialPitch = 0.0f) :
+        position(pos), up({ 0.0f, 1.0f, 0.0f }), yaw(initialYaw), pitch(initialPitch) {
+        updateCameraVectors();
+    }
+
+    Mat4 getViewMatrix() const {        
+        return Mat4::LookAt(position, position + front, up);
+    }
+
+    void processKeyboard(float direction, float velocity) {        
+        if (direction == 0) position = position + front * velocity;
+        if (direction == 1) position = position - front * velocity;
+        if (direction == 2) position = position - right * velocity;
+        if (direction == 3) position = position + right * velocity;
+        if (direction == 4) position.y += velocity;
+        if (direction == 5) position.y -= velocity;
+    }
+
+    void processMouseMovement(float xOffset, float yOffset, bool constrainPitch = true) {
+        float sensitivity = 0.005f;
+        yaw += xOffset * sensitivity;
+        pitch += yOffset * sensitivity;
+        
+        if (constrainPitch) {
+            if (pitch > 1.57f) pitch = 1.57f;
+            if (pitch < -1.57f) pitch = -1.57f;
+        }
+        updateCameraVectors();
+    }
+};
+
 int main() {
     sf::ContextSettings settings;
     settings.depthBits = 24; settings.majorVersion = 3; settings.minorVersion = 3;
@@ -294,8 +381,23 @@ int main() {
     sf::Clock clock;
     float cameraZ = -15.0f;
     float currentWidth = 800, currentHeight = 600;
+    
+    const float SUN_PLANET_SCALE_RATIO = 4.0f;
+    Camera camera({ 0.0f, 0.0f, 15.0f });
+    float lastX = currentWidth / 2.0f;
+    float lastY = currentHeight / 2.0f;
+    bool firstMouse = true;
+    const float CAMERA_SPEED = 10.0f;
+    window.setMouseCursorVisible(false);
+    sf::Mouse::setPosition(sf::Vector2i(lastX, lastY), window);
+    float totalTime = 0.0f;
 
     while (window.isOpen()) {
+        float deltaTime = clock.getElapsedTime().asSeconds();
+        clock.restart();
+        float cameraVelocity = CAMERA_SPEED * deltaTime;
+        totalTime += deltaTime;
+
         while (const auto event = window.pollEvent()) {
             if (event->is<sf::Event::Closed>()) window.close();
 
@@ -321,6 +423,29 @@ int main() {
 
                 if (k->scancode == sf::Keyboard::Scancode::Num4 && planets.size() > 3)
                     changeModelFromFile(planets[3].model, planets[3].name);
+
+                if (k->scancode == sf::Keyboard::Scancode::W) camera.processKeyboard(0, cameraVelocity);
+                if (k->scancode == sf::Keyboard::Scancode::S) camera.processKeyboard(1, cameraVelocity);
+                if (k->scancode == sf::Keyboard::Scancode::A) camera.processKeyboard(2, cameraVelocity);
+                if (k->scancode == sf::Keyboard::Scancode::D) camera.processKeyboard(3, cameraVelocity);
+                if (k->scancode == sf::Keyboard::Scancode::Space) camera.processKeyboard(4, cameraVelocity);
+                if (k->scancode == sf::Keyboard::Scancode::C) camera.processKeyboard(5, cameraVelocity);
+            }
+
+            if (const auto* m = event->getIf<sf::Event::MouseMoved>()) {
+                if (firstMouse) { lastX = m->position.x; lastY = m->position.y; firstMouse = false; }
+
+                float xOffset = m->position.x - lastX;
+                float yOffset = lastY - m->position.y;
+
+                lastX = m->position.x;
+                lastY = m->position.y;
+
+                camera.processMouseMovement(xOffset, yOffset);
+                
+                sf::Mouse::setPosition(sf::Vector2i(currentWidth / 2, currentHeight / 2), window);
+                lastX = currentWidth / 2;
+                lastY = currentHeight / 2;
             }
 
             if (const auto* r = event->getIf<sf::Event::Resized>()) {
@@ -337,32 +462,38 @@ int main() {
         glUseProgram(shaderProgram);
         glBindTexture(GL_TEXTURE_2D, textureID);
 
-        float time = clock.getElapsedTime().asSeconds();
+        float time = deltaTime;
         Mat4 projection = Mat4::Perspective(1.0f, currentWidth/currentHeight, 0.1f, 100.0f);
-        Mat4 view = Mat4::Translate(0.0f, 0.0f, cameraZ);
-        Mat4 systemTilt = Mat4::RotateX(0.5f);
-        view = view * systemTilt;
+        Mat4 view = camera.getViewMatrix();
 
         glUniformMatrix4fv(projLoc, 1, GL_FALSE, projection.data());
         glUniformMatrix4fv(viewLoc, 1, GL_FALSE, view.data());
 
+        float maxPlanetScale = 0.0f;
+        for (const auto& planet : planets) {
+            if (planet.scale > maxPlanetScale) {
+                maxPlanetScale = planet.scale;
+            }
+        }
+
         // ОТРИСОВКА СОЛНЦА
         {
-            Mat4 model = Mat4::RotateY(time * 0.2f);
-            model = model * Mat4::Scale(1.5f);
+            float sunScale = maxPlanetScale * SUN_PLANET_SCALE_RATIO;
+            Mat4 model = Mat4::RotateY(totalTime * 0.2f);
+            model = model * Mat4::Scale(sunScale);
             glUniformMatrix4fv(modelLoc, 1, GL_FALSE, model.data());
             sunModel->draw();
         }
 
         // ОТРИСОВКА ПЛАНЕТ
         for (const auto& planet : planets) {
-            float angle = time * planet.orbitSpeed + planet.phase;
+            float angle = totalTime * planet.orbitSpeed + planet.phase;
             float x = cos(angle) * planet.distance;
             float z = sin(angle) * planet.distance;
 
             Mat4 scaleMat = Mat4::Scale(planet.scale);
-            Mat4 rotMat = Mat4::RotateX(time * planet.selfRotation);
-            rotMat = rotMat * Mat4::RotateY(time * planet.selfRotation);
+            Mat4 rotMat = Mat4::RotateX(totalTime * planet.selfRotation);
+            rotMat = rotMat * Mat4::RotateY(totalTime * planet.selfRotation);
             Mat4 transMat = Mat4::Translate(x, 0.0f, z);
             Mat4 model = transMat * rotMat * scaleMat;
 
