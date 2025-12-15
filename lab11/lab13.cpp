@@ -49,6 +49,7 @@ struct Vec3 {
     Vec3 operator*(float s) const { return { x * s, y * s, z * s }; }
     Vec3 normalize() const {
         float len = std::sqrt(x * x + y * y + z * z);
+        if (len == 0) return {0,0,0};
         return { x / len, y / len, z / len };
     }
     float dot(const Vec3& other) const { return x * other.x + y * other.y + z * other.z; }
@@ -111,7 +112,7 @@ struct Mat4 {
     }
 
     Mat4 operator*(const Mat4& other) const {
-        Mat4 res = { 0 };        
+        Mat4 res = { 0 };
         for (int row = 0; row < 4; ++row) {
             for (int col = 0; col < 4; ++col) {
                 for (int k = 0; k < 4; ++k) {
@@ -132,7 +133,7 @@ struct Mat4 {
         res.m[0] = s.x;  res.m[4] = s.y;  res.m[8] = s.z;
         res.m[1] = u.x;  res.m[5] = u.y;  res.m[9] = u.z;
         res.m[2] = -f.x; res.m[6] = -f.y; res.m[10] = -f.z;
-        
+
         res.m[12] = -(s.dot(eye));
         res.m[13] = -(u.dot(eye));
         res.m[14] = -(-f.dot(eye));
@@ -150,7 +151,7 @@ class OBJModel {
 public:
     OBJModel() : VAO(0), VBO(0), vertexCount(0) {}
 
-    // Запрещаем копирование, чтобы случайно не удалить VBO дважды
+    // Запрещаем копирование
     OBJModel(const OBJModel&) = delete;
     OBJModel& operator=(const OBJModel&) = delete;
 
@@ -163,7 +164,7 @@ public:
     ~OBJModel() { clear(); }
 
     bool loadFromFile(const std::string& filename) {
-        if (VAO != 0) clear(); // Чистим перед новой загрузкой
+        if (VAO != 0) clear();
 
         std::vector<float> positions, texCoords, finalVertices;
         std::ifstream file(filename);
@@ -237,10 +238,9 @@ GLuint createShaderProgram() {
     return p;
 }
 
-// --- Структура Планеты ---
 struct Planet {
-    std::shared_ptr<OBJModel> model; // У каждой планеты своя модель
-    std::string name;                // Имя для UI
+    std::shared_ptr<OBJModel> model;
+    std::string name;
     float distance;
     float orbitSpeed;
     float scale;
@@ -248,7 +248,6 @@ struct Planet {
     float phase;
 };
 
-// Функция помощник для смены модели через консоль
 void changeModelFromFile(std::shared_ptr<OBJModel> targetModel, const std::string& objectName) {
     std::cout << "\n----------------------------------------\n";
     std::cout << "[INPUT] Enter new .obj filename for " << objectName << ": ";
@@ -273,31 +272,30 @@ private:
     Vec3 front;
     Vec3 up;
     Vec3 right;
-
     float yaw;
     float pitch;
 
-    void updateCameraVectors() {        
+    void updateCameraVectors() {
         front.x = cos(yaw) * cos(pitch);
         front.y = sin(pitch);
         front.z = sin(yaw) * cos(pitch);
         front = front.normalize();
-        
         right = front.cross({ 0.0f, 1.0f, 0.0f }).normalize();
         up = right.cross(front).normalize();
     }
 
 public:
-    Camera(Vec3 pos = { 0.0f, 0.0f, 15.0f }, float initialYaw = -1.57f, float initialPitch = 0.0f) :
+    // Отодвинул камеру чуть дальше (Z=25), чтобы новые планеты влезли в кадр
+    Camera(Vec3 pos = { 0.0f, 5.0f, 25.0f }, float initialYaw = -1.57f, float initialPitch = -0.2f) :
         position(pos), up({ 0.0f, 1.0f, 0.0f }), yaw(initialYaw), pitch(initialPitch) {
         updateCameraVectors();
     }
 
-    Mat4 getViewMatrix() const {        
+    Mat4 getViewMatrix() const {
         return Mat4::LookAt(position, position + front, up);
     }
 
-    void processKeyboard(float direction, float velocity) {        
+    void processKeyboard(float direction, float velocity) {
         if (direction == 0) position = position + front * velocity;
         if (direction == 1) position = position - front * velocity;
         if (direction == 2) position = position - right * velocity;
@@ -310,7 +308,7 @@ public:
         float sensitivity = 0.005f;
         yaw += xOffset * sensitivity;
         pitch += yOffset * sensitivity;
-        
+
         if (constrainPitch) {
             if (pitch > 1.57f) pitch = 1.57f;
             if (pitch < -1.57f) pitch = -1.57f;
@@ -329,23 +327,18 @@ int main() {
     glewExperimental = GL_TRUE; glewInit();
     glEnable(GL_DEPTH_TEST);
 
-    // --- Инструкция ---
     std::cout << "========================================\n";
-    std::cout << "      SOLAR SYSTEM EDITOR v1.0          \n";
+    std::cout << "      SOLAR SYSTEM EDITOR v1.1          \n";
     std::cout << "========================================\n";
-    std::cout << "Press [0] -> Change SUN model\n";
-    std::cout << "Press [1] -> Change MERCURY model\n";
-    std::cout << "Press [2] -> Change VENUS model\n";
-    std::cout << "Press [3] -> Change EARTH model\n";
-    std::cout << "Press [4] -> Change MARS model\n";
+    std::cout << "[0] Change SUN\n";
+    std::cout << "[1-6] Change PLANETS\n";
+    std::cout << "TAB to capture/release mouse.\n";
     std::cout << "----------------------------------------\n";
 
     // --- Инициализация Моделей ---
-    // Создаем "умные указатели", чтобы владеть моделями
     auto sunModel = std::make_shared<OBJModel>();
-    sunModel->loadFromFile("donut.obj"); // Дефолт для солнца
+    sunModel->loadFromFile("donut.obj");
 
-    // Вектор планет. Каждая получает свой уникальный shared_ptr с начальной моделью
     std::vector<Planet> planets;
 
     // 1. Меркурий (Пирамида)
@@ -364,6 +357,14 @@ int main() {
     auto m4 = std::make_shared<OBJModel>(); m4->loadFromFile("cube.obj");
     planets.push_back({m4, "Mars", 10.0f, 0.3f, 0.4f, 2.5f, 1.0f});
 
+    // 5. Юпитер
+    auto m5 = std::make_shared<OBJModel>(); m5->loadFromFile("donut.obj"); // Используем пончик как базу
+    planets.push_back({m5, "Jupiter", 14.0f, 0.2f, 1.2f, 4.0f, 0.5f});
+
+    // 6. Сатурн
+    auto m6 = std::make_shared<OBJModel>(); m6->loadFromFile("cube.obj"); // Используем куб как базу
+    planets.push_back({m6, "Saturn", 18.0f, 0.15f, 1.0f, 1.0f, 2.0f});
+
 
     sf::Texture sfTexture;
     if (!sfTexture.loadFromFile("papich.jpg")) {
@@ -381,9 +382,9 @@ int main() {
     sf::Clock clock;
     float cameraZ = -15.0f;
     float currentWidth = 800, currentHeight = 600;
-    
+
     const float SUN_PLANET_SCALE_RATIO = 4.0f;
-    Camera camera({ 0.0f, 0.0f, 15.0f });
+    Camera camera({ 0.0f, 5.0f, 25.0f });
     float lastX = currentWidth / 2.0f;
     float lastY = currentHeight / 2.0f;
     bool firstMouse = true;
@@ -409,7 +410,7 @@ int main() {
 
                 if (k->scancode == sf::Keyboard::Scancode::Tab) {
                     mouseCaptured = !mouseCaptured;
-                    window.setMouseCursorVisible(!mouseCaptured);                    
+                    window.setMouseCursorVisible(!mouseCaptured);
                     if (mouseCaptured) {
                         sf::Mouse::setPosition(sf::Vector2i(currentWidth / 2, currentHeight / 2), window);
                         lastX = currentWidth / 2;
@@ -423,7 +424,6 @@ int main() {
                     changeModelFromFile(sunModel, "Sun");
                 }
 
-                // 1..4: Планеты
                 if (k->scancode == sf::Keyboard::Scancode::Num1 && planets.size() > 0)
                     changeModelFromFile(planets[0].model, planets[0].name);
 
@@ -435,6 +435,12 @@ int main() {
 
                 if (k->scancode == sf::Keyboard::Scancode::Num4 && planets.size() > 3)
                     changeModelFromFile(planets[3].model, planets[3].name);
+
+                if (k->scancode == sf::Keyboard::Scancode::Num5 && planets.size() > 4)
+                    changeModelFromFile(planets[4].model, planets[4].name);
+
+                if (k->scancode == sf::Keyboard::Scancode::Num6 && planets.size() > 5)
+                    changeModelFromFile(planets[5].model, planets[5].name);
 
                 if (k->scancode == sf::Keyboard::Scancode::W) camera.processKeyboard(0, cameraVelocity);
                 if (k->scancode == sf::Keyboard::Scancode::S) camera.processKeyboard(1, cameraVelocity);
