@@ -387,8 +387,11 @@ int main() {
     float lastX = currentWidth / 2.0f;
     float lastY = currentHeight / 2.0f;
     bool firstMouse = true;
+
     const float CAMERA_SPEED = 10.0f;
-    window.setMouseCursorVisible(false);
+    bool mouseCaptured = true;
+
+    window.setMouseCursorVisible(!mouseCaptured);
     sf::Mouse::setPosition(sf::Vector2i(lastX, lastY), window);
     float totalTime = 0.0f;
 
@@ -404,7 +407,16 @@ int main() {
             if (const auto* k = event->getIf<sf::Event::KeyPressed>()) {
                 if (k->scancode == sf::Keyboard::Scancode::Escape) window.close();
 
-                // --- ЛОГИКА СМЕНЫ МОДЕЛЕЙ ---
+                if (k->scancode == sf::Keyboard::Scancode::Tab) {
+                    mouseCaptured = !mouseCaptured;
+                    window.setMouseCursorVisible(!mouseCaptured);                    
+                    if (mouseCaptured) {
+                        sf::Mouse::setPosition(sf::Vector2i(currentWidth / 2, currentHeight / 2), window);
+                        lastX = currentWidth / 2;
+                        lastY = currentHeight / 2;
+                        firstMouse = false;
+                    }
+                }
 
                 // 0: Солнце
                 if (k->scancode == sf::Keyboard::Scancode::Num0) {
@@ -433,19 +445,21 @@ int main() {
             }
 
             if (const auto* m = event->getIf<sf::Event::MouseMoved>()) {
-                if (firstMouse) { lastX = m->position.x; lastY = m->position.y; firstMouse = false; }
+                if (mouseCaptured) {
+                    if (firstMouse) { lastX = m->position.x; lastY = m->position.y; firstMouse = false; }
 
-                float xOffset = m->position.x - lastX;
-                float yOffset = lastY - m->position.y;
+                    float xOffset = m->position.x - lastX;
+                    float yOffset = lastY - m->position.y;
 
-                lastX = m->position.x;
-                lastY = m->position.y;
+                    lastX = m->position.x;
+                    lastY = m->position.y;
 
-                camera.processMouseMovement(xOffset, yOffset);
-                
-                sf::Mouse::setPosition(sf::Vector2i(currentWidth / 2, currentHeight / 2), window);
-                lastX = currentWidth / 2;
-                lastY = currentHeight / 2;
+                    camera.processMouseMovement(xOffset, yOffset);
+                    
+                    sf::Mouse::setPosition(sf::Vector2i(currentWidth / 2, currentHeight / 2), window);
+                    lastX = currentWidth / 2;
+                    lastY = currentHeight / 2;
+                }
             }
 
             if (const auto* r = event->getIf<sf::Event::Resized>()) {
