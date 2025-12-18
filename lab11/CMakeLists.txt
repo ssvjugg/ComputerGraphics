@@ -1,86 +1,21 @@
-﻿cmake_minimum_required(VERSION 3.26)
-project(lab11 LANGUAGES CXX)
+﻿cmake_minimum_required(VERSION 3.10)
+project(lab11)
 
 set(CMAKE_CXX_STANDARD 17)
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-find_package(SFML 3.0 COMPONENTS Graphics Window System REQUIRED)
+# 1. Находим GLFW
+find_package(glfw3 REQUIRED)
 
-find_package(GLEW REQUIRED)
+# 2. Подключаем папку include (чтобы работало #include <glad/glad.h>)
+include_directories(include)
 
-add_executable(${PROJECT_NAME} "lab13.cpp")
+# 3. Создаем исполняемый файл "main"
+# Мы собираем вместе твой код (lab14.cpp) и код загрузчика (glad.c)
+add_executable(main lab14.cpp glad.c)
 
-target_link_libraries(${PROJECT_NAME}
-    PRIVATE
-        SFML::Graphics
-        SFML::Window
-        SFML::System
-        GLEW::GLEW
-)
-
-set(TEXTURE_FILES "texture.jpg" "texture2.jpg" "papich.jpg")
-
-# Указываем список всех файлов ресурсов (картинки и модели)
-set(RESOURCE_FILES
-        "papich.jpg"
-        "donut.obj"
-        "cube.obj"
-        "pyramid.obj"
-        "chai.obj"
-)
-
-foreach(RES_FILE IN LISTS RESOURCE_FILES)
-    if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/${RES_FILE}")
-        add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
-                COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                "${CMAKE_CURRENT_SOURCE_DIR}/${RES_FILE}"
-                "$<TARGET_FILE_DIR:${PROJECT_NAME}>/${RES_FILE}"
-                COMMENT "Copying resource file: ${RES_FILE}"
-        )
-    else()
-        message(WARNING "Resource file ${RES_FILE} not found in source directory! Program will crash if it tries to load it.")
-    endif()
-endforeach()
-
-foreach(TEXTURE_FILE IN LISTS TEXTURE_FILES)
-    if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/${TEXTURE_FILE}")    
-        add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
-            COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                "${CMAKE_CURRENT_SOURCE_DIR}/${TEXTURE_FILE}"            
-                "$<TARGET_FILE_DIR:${PROJECT_NAME}>/${TEXTURE_FILE}"
-            COMMENT "Copying texture file: ${TEXTURE_FILE}"
-        )
-    else()
-        message(WARNING "Texture file ${TEXTURE_FILE} not found in source directory. Program might fail to run.")
-    endif()
-endforeach()
-
-if(APPLE)
-    find_library(OPENGL_FRAMEWORK OpenGL)
-    if(OPENGL_FRAMEWORK)
-        target_link_libraries(${PROJECT_NAME} PRIVATE ${OPENGL_FRAMEWORK})
-    endif()
-
-elseif(WIN32)    
-    if(VCPKG_TARGET_TRIPLET)
-        set(SFML_DLL_DIR "${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/bin")
-        set(GLEW_DLL_DIR "${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/bin")
-
-        foreach(dll IN ITEMS
-            sfml-graphics-3.dll
-            sfml-window-3.dll
-            sfml-system-3.dll
-            glew32.dll
-        )
-            add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
-                COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                    "${SFML_DLL_DIR}/${dll}"
-                    "$<TARGET_FILE_DIR:${PROJECT_NAME}>/${dll}"
-                COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                    "${GLEW_DLL_DIR}/${dll}"
-                    "$<TARGET_FILE_DIR:${PROJECT_NAME}>/${dll}"
-                COMMENT "Copying ${dll}"
-            )
-        endforeach()
-    endif()
+# 4. Линкуем библиотеки к цели "main"
+if (APPLE)
+    target_link_libraries(main glfw "-framework OpenGL" "-framework Cocoa" "-framework IOKit" "-framework CoreVideo")
+else()
+    target_link_libraries(main glfw dl)
 endif()
