@@ -1,0 +1,14 @@
+# Blender 4.5.3 LTS MTL File: 'soda_can.blend'
+# www.blender.org
+
+newmtl soda_can
+Ka 1.000000 1.000000 1.000000
+Ks 0.500000 0.500000 0.500000
+Ke 0.000000 0.000000 0.000000
+Ni 1.500000
+d 1.000000
+illum 2
+map_Kd C:/Users/MONICA/Desktop/3dmodels/soda_can/textures/soda_can_color2.png
+map_Ns C:/Users/MONICA/Desktop/3dmodels/soda_can/soda_can_blender/textures/soda_can_roughness.png
+map_refl C:/Users/MONICA/Desktop/3dmodels/soda_can/textures/soda_can_metallic.png
+map_Bump -bm 1.000000 C:/Users/MONICA/Desktop/3dmodels/soda_can/textures/soda_can_normal.png
