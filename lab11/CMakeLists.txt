@@ -8,7 +8,7 @@ find_package(SFML 3.0 COMPONENTS Graphics Window System REQUIRED)
 
 find_package(GLEW REQUIRED)
 
-add_executable(${PROJECT_NAME} "lab13.cpp")
+add_executable(${PROJECT_NAME} "lab14.cpp")
 
 target_link_libraries(${PROJECT_NAME}
     PRIVATE
