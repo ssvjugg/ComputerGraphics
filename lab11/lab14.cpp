@@ -51,7 +51,11 @@ const char* fragmentShaderSource = R"(
     uniform vec3 objectColor;
     uniform vec3 viewPos;
 
+    // Тип источника света: 0=Point, 1=Directional, 2=Spot
     uniform int lightMode; 
+    
+    // Тип освещения: 0=Phong, 1=Toon, 2=Cook-Torrance
+    uniform int shadingModel; 
 
     struct Light {
         vec3 position;
@@ -62,6 +66,36 @@ const char* fragmentShaderSource = R"(
     };
     uniform Light light;
 
+    const float PI = 3.14159265359;
+
+    // --- Вспомогательные функции для Кука-Торранса ---
+    float DistributionBeckmann(vec3 N, vec3 H, float m) {
+        float NdotH = max(dot(N, H), 0.0001);
+        float NdotH2 = NdotH * NdotH;
+        float m2 = m * m;
+        float exponent = (NdotH2 - 1.0) / (m2 * NdotH2);
+        return (exp(exponent)) / (PI * m2 * NdotH2 * NdotH2);
+    }
+
+    float GeometrySchlickGGX(float NdotV, float k) {
+        float nom   = NdotV;
+        float denom = NdotV * (1.0 - k) + k;
+        return nom / denom;
+    }
+
+    float GeometrySmith(vec3 N, vec3 V, vec3 L, float k) {
+        float NdotV = max(dot(N, V), 0.0);
+        float NdotL = max(dot(N, L), 0.0);
+        float ggx1 = GeometrySchlickGGX(NdotV, k);
+        float ggx2 = GeometrySchlickGGX(NdotL, k);
+        return ggx1 * ggx2;
+    }
+
+    vec3 FresnelSchlick(float cosTheta, vec3 F0) {
+        return F0 + (1.0 - F0) * pow(1.0 - cosTheta, 5.0);
+    }
+    // ------------------------------------------------
+
     void main() {
         vec3 norm = normalize(Normal);
         vec3 viewDir = normalize(viewPos - FragPos);
@@ -69,42 +103,105 @@ const char* fragmentShaderSource = R"(
         float attenuation = 1.0;
         float spotIntensity = 1.0;
     
-        if (lightMode == 0) {
+        // 1. Расчет направления света 
+        if (lightMode == 0) { // Point
             lightDir = normalize(light.position - FragPos);
             float dist = length(light.position - FragPos);
             attenuation = 1.0 / (1.0 + 0.09 * dist + 0.032 * (dist * dist));
         } 
-        else if (lightMode == 1) {
+        else if (lightMode == 1) { // Directional
             lightDir = normalize(-light.direction);
         } 
-        else if (lightMode == 2) {
+        else if (lightMode == 2) { // Spot
             lightDir = normalize(light.position - FragPos);
             float theta = dot(lightDir, normalize(-light.direction));
             float epsilon = light.cutOff - light.outerCutOff;
             spotIntensity = clamp((theta - light.outerCutOff) / epsilon, 0.0, 1.0);
-        
             float dist = length(light.position - FragPos);
             attenuation = 1.0 / (1.0 + 0.09 * dist + 0.032 * (dist * dist));
         }
-    
-        vec3 ambient = 0.2 * objectColor;
-    
-        float diff = max(dot(norm, lightDir), 0.0);
-        vec3 diffuse = diff * vec3(1.0, 1.0, 1.0) * light.intensity;
 
-        vec3 reflectDir = reflect(-lightDir, norm);
-        float spec = pow(max(dot(viewDir, reflectDir), 0.0), 32);
-        vec3 specular = 0.5 * spec * vec3(1.0, 1.0, 1.0);
-
-        vec3 result = (ambient + (diffuse + specular) * attenuation * spotIntensity);
-
+        vec3 baseColor = objectColor;
         if (hasTexture) {
-            vec4 texColor = texture(texture1, TexCoord);
-            if (texColor.a < 0.5) discard; // отбрасываем прозрачные пиксели
-            FragColor = vec4(result * texColor.rgb, texColor.a);
-        } else {
-            FragColor = vec4(result * objectColor, 1.0);
-        }        
+            vec4 tex = texture(texture1, TexCoord);
+            if(tex.a < 0.1) discard;
+            baseColor = tex.rgb;
+        }
+
+        vec3 finalColor = vec3(0.0);
+
+        // === ВАРИАНТ 1: PHONG (Классика) ===
+        if (shadingModel == 0) {
+            vec3 ambient = 0.1 * baseColor;
+            
+            float diff = max(dot(norm, lightDir), 0.0);
+            vec3 diffuse = diff * baseColor * light.intensity;
+            
+            vec3 reflectDir = reflect(-lightDir, norm);
+            float spec = pow(max(dot(viewDir, reflectDir), 0.0), 32);
+            vec3 specular = 0.5 * spec * vec3(1.0) * light.intensity;
+            
+            finalColor = (ambient + (diffuse + specular) * attenuation * spotIntensity);
+        }
+
+        // === ВАРИАНТ 2: TOON SHADING (Мультяшный) ===
+        else if (shadingModel == 1) {
+            float intensityVal = dot(lightDir, norm);
+            float toonDiff = 1.0;
+            
+            // Дискретизация света (ступеньки)
+            if (intensityVal > 0.95)      toonDiff = 1.0;
+            else if (intensityVal > 0.5)  toonDiff = 0.7;
+            else if (intensityVal > 0.25) toonDiff = 0.4;
+            else                          toonDiff = 0.1;
+            
+            // Обводка (Rim Light)
+            float rim = 1.0 - max(dot(viewDir, norm), 0.0);
+            rim = smoothstep(0.6, 1.0, rim);
+            
+            vec3 diffuse = toonDiff * baseColor * light.intensity;
+            
+            if (rim > 0.8) {
+                 finalColor = vec3(0.0); // Черная обводка
+            } else {
+                 finalColor = diffuse * attenuation * spotIntensity;
+            }
+        }
+
+        // === ВАРИАНТ 3: COOK-TORRANCE (Физический) ===
+        else if (shadingModel == 2) {
+            float roughness = 0.3; // Шероховатость
+            float metallic = 0.1;  // Металличность
+            vec3 F0 = vec3(0.04); 
+            F0 = mix(F0, baseColor, metallic);
+
+            vec3 H = normalize(viewDir + lightDir);
+            
+            // Cook-Torrance BRDF
+            float D = DistributionBeckmann(norm, H, roughness);
+            float G = GeometrySmith(norm, viewDir, lightDir, (roughness + 1.0)*(roughness + 1.0)/8.0);
+            vec3 F = FresnelSchlick(max(dot(H, viewDir), 0.0), F0);
+            
+            vec3 numerator = D * G * F;
+            float denominator = 4.0 * max(dot(norm, viewDir), 0.0) * max(dot(norm, lightDir), 0.0) + 0.001; 
+            vec3 specular = numerator / denominator;
+            
+            vec3 kS = F;
+            vec3 kD = vec3(1.0) - kS;
+            kD *= 1.0 - metallic;
+            
+            float NdotL = max(dot(norm, lightDir), 0.0);
+            vec3 Lo = (kD * baseColor / PI + specular) * vec3(1.0) * light.intensity * NdotL;
+            
+            vec3 ambient = vec3(0.03) * baseColor;
+            finalColor = ambient + Lo * attenuation * spotIntensity;
+            
+            // Простая гамма-коррекция
+            finalColor = finalColor / (finalColor + vec3(1.0));
+            finalColor = pow(finalColor, vec3(1.0/2.2)); 
+        }
+
+        FragColor = vec4(finalColor, 1.0);
     }
 )";
 
@@ -654,6 +751,7 @@ struct SceneObject {
     Vec3 rotation;
     Vec3 scale;
     float rotationSpeed;
+    int shadingModelId;
 };
 
 int main() {
@@ -805,6 +903,9 @@ int main() {
     Vec3 lightDir({ 0.0f, -1.0f, -0.5f });
     float intensity = 1.0f;
     float spotlightAngle = 0.2f;
+    // Переменная для хранения текущего глобального режима
+    // 0 = Phong, 1 = Toon, 2 = Cook-Torrance
+    int currentShadingMode = 0;
 
     // Главный цикл
     while (window.isOpen()) {
@@ -821,6 +922,19 @@ int main() {
             if (const auto* k = event->getIf<sf::Event::KeyPressed>()) {
                 if (k->scancode == sf::Keyboard::Scancode::Escape) {
                     window.close();
+                }
+
+                if (k->code == sf::Keyboard::Key::Num1) {
+                    currentShadingMode = 0; // Phong
+                    window.setTitle("Mode: Phong Shading");
+                }
+                else if (k->code == sf::Keyboard::Key::Num2) {
+                    currentShadingMode = 1; // Toon
+                    window.setTitle("Mode: Toon Shading");
+                }
+                else if (k->code == sf::Keyboard::Key::Num3) {
+                    currentShadingMode = 2; // Cook-Torrance
+                    window.setTitle("Mode: Cook-Torrance");
                 }
 
                 if (k->scancode == sf::Keyboard::Scancode::Tab) {
@@ -919,11 +1033,13 @@ int main() {
         glUniformMatrix4fv(projLoc, 1, GL_FALSE, projection.data());
         glUniformMatrix4fv(viewLoc, 1, GL_FALSE, view.data());
 
+        GLint shadingModelLoc = glGetUniformLocation(shaderProgram, "shadingModel");
         // Отрисовываем все объекты
         // Отрисовываем все объекты
         for (auto& obj : objects) {
             // Обновляем вращение - ЗАКОММЕНТИРУЙТЕ эту строку:
             // obj.rotation.y += obj.rotationSpeed * deltaTime;
+            glUniform1i(shadingModelLoc, currentShadingMode);
 
             // Создаем матрицу модели БЕЗ вращения:
             Mat4 model = Mat4::Translate(obj.position.x, obj.position.y, obj.position.z);
