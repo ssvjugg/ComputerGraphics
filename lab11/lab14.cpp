@@ -19,15 +19,21 @@ const char* vertexShaderSource = R"(
     #version 330 core
     layout (location = 0) in vec3 aPos;
     layout (location = 1) in vec2 aTexCoord;
+    layout (location = 2) in vec3 aNormal;
 
     out vec2 TexCoord;
+    out vec3 Normal;
+    out vec3 FragPos;
 
     uniform mat4 model;
     uniform mat4 view;
     uniform mat4 projection;
 
     void main() {
-        gl_Position = projection * view * model * vec4(aPos, 1.0);
+        FragPos = vec3(model * vec4(aPos, 1.0));    
+        Normal = mat3(transpose(inverse(model))) * aNormal;  
+    
+        gl_Position = projection * view * vec4(FragPos, 1.0);
         TexCoord = aTexCoord;
     }
 )";
@@ -35,23 +41,70 @@ const char* vertexShaderSource = R"(
 const char* fragmentShaderSource = R"(
     #version 330 core
     out vec4 FragColor;
+
     in vec2 TexCoord;
+    in vec3 Normal;
+    in vec3 FragPos;
 
     uniform sampler2D texture1;
     uniform bool hasTexture;
     uniform vec3 objectColor;
+    uniform vec3 viewPos;
+
+    uniform int lightMode; 
+
+    struct Light {
+        vec3 position;
+        vec3 direction;
+        float intensity;
+        float cutOff;
+        float outerCutOff;
+    };
+    uniform Light light;
 
     void main() {
-        // Для отладки - всегда показываем красный цвет
-        // FragColor = vec4(1.0, 0.0, 0.0, 1.0);
+        vec3 norm = normalize(Normal);
+        vec3 viewDir = normalize(viewPos - FragPos);
+        vec3 lightDir;
+        float attenuation = 1.0;
+        float spotIntensity = 1.0;
+    
+        if (lightMode == 0) {
+            lightDir = normalize(light.position - FragPos);
+            float dist = length(light.position - FragPos);
+            attenuation = 1.0 / (1.0 + 0.09 * dist + 0.032 * (dist * dist));
+        } 
+        else if (lightMode == 1) {
+            lightDir = normalize(-light.direction);
+        } 
+        else if (lightMode == 2) {
+            lightDir = normalize(light.position - FragPos);
+            float theta = dot(lightDir, normalize(-light.direction));
+            float epsilon = light.cutOff - light.outerCutOff;
+            spotIntensity = clamp((theta - light.outerCutOff) / epsilon, 0.0, 1.0);
+        
+            float dist = length(light.position - FragPos);
+            attenuation = 1.0 / (1.0 + 0.09 * dist + 0.032 * (dist * dist));
+        }
+    
+        vec3 ambient = 0.2 * objectColor;
+    
+        float diff = max(dot(norm, lightDir), 0.0);
+        vec3 diffuse = diff * vec3(1.0, 1.0, 1.0) * light.intensity;
+
+        vec3 reflectDir = reflect(-lightDir, norm);
+        float spec = pow(max(dot(viewDir, reflectDir), 0.0), 32);
+        vec3 specular = 0.5 * spec * vec3(1.0, 1.0, 1.0);
+
+        vec3 result = (ambient + (diffuse + specular) * attenuation * spotIntensity);
 
         if (hasTexture) {
             vec4 texColor = texture(texture1, TexCoord);
             if (texColor.a < 0.5) discard; // отбрасываем прозрачные пиксели
-            FragColor = texColor;
+            FragColor = vec4(result * texColor.rgb, texColor.a);
         } else {
-            FragColor = vec4(objectColor, 1.0);
-        }
+            FragColor = vec4(result * objectColor, 1.0);
+        }        
     }
 )";
 
@@ -363,6 +416,13 @@ public:
                     } else {
                         finalVertices.insert(finalVertices.end(), {0.0f, 0.0f});
                     }
+
+                    if (fi.vn >= 0 && fi.vn < normals.size()) {
+                        finalVertices.push_back(normals[fi.vn].x);
+                        finalVertices.push_back(normals[fi.vn].y);
+                        finalVertices.push_back(normals[fi.vn].z);
+                    }
+                    else { finalVertices.insert(finalVertices.end(), { 0, 1, 0 }); }
                 }
             }
             else if (face.size() > 3) {
@@ -390,6 +450,12 @@ public:
                         } else {
                             finalVertices.insert(finalVertices.end(), {0.0f, 0.0f});
                         }
+                        if (fi.vn >= 0 && fi.vn < normals.size()) {
+                            finalVertices.push_back(normals[fi.vn].x);
+                            finalVertices.push_back(normals[fi.vn].y);
+                            finalVertices.push_back(normals[fi.vn].z);
+                        }
+                        else { finalVertices.insert(finalVertices.end(), { 0, 1, 0 }); }
                     }
                 }
             }
@@ -405,7 +471,7 @@ public:
             return false;
         }
 
-        vertexCount = finalVertices.size() / 5;
+        vertexCount = finalVertices.size() / 8;
         std::cout << "[DEBUG] Vertex count: " << vertexCount << " (triangles: " << vertexCount / 3 << ")" << std::endl;
 
         // Создаем VAO и VBO
@@ -415,10 +481,12 @@ public:
         glBindBuffer(GL_ARRAY_BUFFER, VBO);
         glBufferData(GL_ARRAY_BUFFER, finalVertices.size() * sizeof(float), finalVertices.data(), GL_STATIC_DRAW);
 
-        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)0);
+        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)0);
         glEnableVertexAttribArray(0);
-        glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)(3 * sizeof(float)));
+        glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(3 * sizeof(float)));
         glEnableVertexAttribArray(1);
+        glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(5 * sizeof(float)));
+        glEnableVertexAttribArray(2);
 
         glBindVertexArray(0);
         glBindBuffer(GL_ARRAY_BUFFER, 0);
@@ -598,7 +666,7 @@ int main() {
     settings.minorVersion = 3;
     settings.attributeFlags = sf::ContextSettings::Core;
 
-    sf::Window window(sf::VideoMode({1200, 800}), "Lab 14: 3D Models Showcase", sf::State::Windowed, settings);
+    sf::Window window(sf::VideoMode({ 1200, 800 }), "Lab 14: 3D Models Showcase", sf::State::Windowed, settings);
     window.setVerticalSyncEnabled(true);
     window.setActive(true);
 
@@ -636,8 +704,8 @@ int main() {
     // 1. Забор (Fence) - слева в глубине
     auto fenceModel = std::make_shared<TexturedModel>();
     if (fenceModel->loadFromFile("3d_models/Free_Fence9OBJ/objFence.obj",
-                                 textureLoader,
-                                 "3d_models/Free_Fence9OBJ/textures/germany010.jpg")) {
+        textureLoader,
+        "3d_models/Free_Fence9OBJ/textures/germany010.jpg")) {
         objects.push_back({
             fenceModel,
             "Fence",
@@ -645,14 +713,14 @@ int main() {
             { 0.0f, 0.5f, 0.0f },     // Немного повернут
             { 5.3f, 5.3f, 5.3f },     // Масштаб
             0.2f                      // Очень медленное вращение
-        });
+            });
     }
 
     // 2. Кофейный столик (Coffee Table) - центр слева
     auto coffeeTableModel = std::make_shared<TexturedModel>();
     if (coffeeTableModel->loadFromFile("3d_models/coffee_table/coffee_table.obj",
-                                       textureLoader,
-                                       "3d_models/coffee_table/textures/coffee_table_Albedo.png")) {
+        textureLoader,
+        "3d_models/coffee_table/textures/coffee_table_Albedo.png")) {
         objects.push_back({
             coffeeTableModel,
             "Coffee Table",
@@ -660,14 +728,14 @@ int main() {
             { 0.0f, 0.8f, 0.0f },     // Повернут для лучшего обзора
             { 0.08f, 0.08f, 0.08f },  // Увеличенный масштаб
             0.0f                       // Не вращается
-        });
+            });
     }
 
     // 3. Мяч для гольфа (Golf Ball) - в центре сцены на возвышении
     auto golfBallModel = std::make_shared<TexturedModel>();
     if (golfBallModel->loadFromFile("3d_models/golf_ball/golf_ball.obj",
-                                    textureLoader,
-                                    "3d_models/golf_ball/textures/golf_ball_Albedo.png")) {
+        textureLoader,
+        "3d_models/golf_ball/textures/golf_ball_Albedo.png")) {
         objects.push_back({
             golfBallModel,
             "Golf Ball",
@@ -675,14 +743,14 @@ int main() {
             { 0.0f, 0.0f, 0.0f },
             { 0.08f, 0.08f, 0.08f },     // Увеличенный мяч
             1.5f                      // Быстрое вращение (как катящийся мяч)
-        });
+            });
     }
 
     // 4. Старый табурет (Old Stool) - центр справа
     auto stoolModel = std::make_shared<TexturedModel>();
     if (stoolModel->loadFromFile("3d_models/old_stool/old_stool.obj",
-                                 textureLoader,
-                                 "3d_models/old_stool/textures/old_stool_Albedo.png")) {
+        textureLoader,
+        "3d_models/old_stool/textures/old_stool_Albedo.png")) {
         objects.push_back({
             stoolModel,
             "Old Stool",
@@ -690,14 +758,14 @@ int main() {
             { 0.0f, -0.5f, 0.0f },    // Повернут в другую сторону
             { 0.06f, 0.06f, 0.06f },  // Увеличенный масштаб
             0.0f                       // Не вращается
-        });
+            });
     }
 
     // 5. Банка с газировкой (Soda Can) - справа в глубине на столе/возвышении
     auto sodaCanModel = std::make_shared<TexturedModel>();
     if (sodaCanModel->loadFromFile("3d_models/soda_can_obj/soda_can.obj",
-                                   textureLoader,
-                                   "3d_models/soda_can_obj/textures/soda_can_color.png")) {
+        textureLoader,
+        "3d_models/soda_can_obj/textures/soda_can_color.png")) {
         objects.push_back({
             sodaCanModel,
             "Soda Can",
@@ -705,7 +773,7 @@ int main() {
             { 0.3f, 0.0f, 0.0f },     // Наклонена для реалистичности
             { 13.0f, 13.0f, 13.0f },     // Увеличенный масштаб (но не слишком)
             0.8f                      // Медленное вращение
-        });
+            });
     }
 
     std::cout << "\n========================================\n";
@@ -731,6 +799,12 @@ int main() {
 
     sf::Clock clock;
     float totalTime = 0.0f;
+
+    int lightMode = 0;
+    Vec3 lightPos({ 0.0f, 10.0f, 0.0f });
+    Vec3 lightDir({ 0.0f, -1.0f, -0.5f });
+    float intensity = 1.0f;
+    float spotlightAngle = 0.2f;
 
     // Главный цикл
     while (window.isOpen()) {
@@ -767,6 +841,25 @@ int main() {
                 if (k->scancode == sf::Keyboard::Scancode::D) camera.processKeyboard(3, cameraVelocity);
                 if (k->scancode == sf::Keyboard::Scancode::Space) camera.processKeyboard(4, cameraVelocity);
                 if (k->scancode == sf::Keyboard::Scancode::C) camera.processKeyboard(5, cameraVelocity);
+                if (k->scancode == sf::Keyboard::Scancode::L) {
+                    lightMode = (lightMode + 1) % 3;
+                }
+                
+                if (k->scancode == sf::Keyboard::Scancode::Left) lightPos.x -= 0.5f;                                     
+                if (k->scancode == sf::Keyboard::Scancode::Right) lightPos.x += 0.5f;
+                if (k->scancode == sf::Keyboard::Scancode::Up) lightPos.z -= 0.5f;
+                if (k->scancode == sf::Keyboard::Scancode::Down) lightPos.z += 0.5f;
+                // Интенсивность
+                if (k->scancode == sf::Keyboard::Scancode::U)    intensity += 0.1f;
+                if (k->scancode == sf::Keyboard::Scancode::I)  intensity -= 0.1f;
+                if (k->scancode == sf::Keyboard::Scancode::O) {
+                    spotlightAngle -= 0.01f;
+                    if (spotlightAngle < 0.01f) spotlightAngle = 0.01f;
+                }
+                if (k->scancode == sf::Keyboard::Scancode::P) {
+                    spotlightAngle += 0.01f;
+                    if (spotlightAngle > 1.0f) spotlightAngle = 1.0f;
+                }
             }
 
             if (const auto* m = event->getIf<sf::Event::MouseMoved>()) {
@@ -806,6 +899,16 @@ int main() {
         // Используем шейдерную программу
         glUseProgram(shaderProgram);
 
+        glUniform1i(glGetUniformLocation(shaderProgram, "lightMode"), lightMode);
+        glUniform3f(glGetUniformLocation(shaderProgram, "viewPos"), camera.getPosition().x, camera.getPosition().y, camera.getPosition().z);
+
+        glUniform3f(glGetUniformLocation(shaderProgram, "light.position"), lightPos.x, lightPos.y, lightPos.z);
+        glUniform3f(glGetUniformLocation(shaderProgram, "light.direction"), lightDir.x, lightDir.y, lightDir.z);
+        glUniform1f(glGetUniformLocation(shaderProgram, "light.intensity"), intensity);
+
+        glUniform1f(glGetUniformLocation(shaderProgram, "light.cutOff"), cos(spotlightAngle));
+        glUniform1f(glGetUniformLocation(shaderProgram, "light.outerCutOff"), cos(spotlightAngle + 0.05f));
+
         // Устанавливаем матрицы проекции и вида
         sf::Vector2u windowSize = window.getSize();
         Mat4 projection = Mat4::Perspective(1.0f,
@@ -831,15 +934,7 @@ int main() {
             glUniformMatrix4fv(modelLoc, 1, GL_FALSE, model.data());
 
             // Отрисовываем модель
-            obj.model->draw(shaderProgram);
-
-            // Отладочный вывод для проверки видимости (однократно)
-            static bool printed = false;
-            if (!printed) {
-                std::cout << "[DEBUG] Model: " << obj.name
-                          << " Pos: (" << obj.position.x << ", " << obj.position.y << ", " << obj.position.z << ")"
-                          << " Scale: (" << obj.scale.x << ", " << obj.scale.y << ", " << obj.scale.z << ")" << std::endl;
-            }
+            obj.model->draw(shaderProgram);            
         }
 
         // Отображаем результат
